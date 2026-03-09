@@ -1,0 +1,7 @@
+# Clippy configuration for cursor-udp service
+
+# Set cognitive complexity threshold
+cognitive-complexity-threshold = 15
+
+# Allow certain common patterns
+avoid-breaking-exported-api = true
