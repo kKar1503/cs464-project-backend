@@ -1,0 +1,54 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file (if you prefer not to commit it)
+# go.work
+
+# Dependency directories
+vendor/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Log files
+*.log
+
+# Compiled Object files
+*.o
+*.a
+
+# Go build cache
+.cache/
+
+# Air live reload
+tmp/
+
+# Rust build artifacts (for cursor-udp service)
+services/cursor-udp/target/
+
+# Docker volumes
+volumes/
