@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS player_cards;
+DROP TABLE IF EXISTS decks;
+DROP TABLE IF EXISTS battle_logs;
