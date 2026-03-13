@@ -13,6 +13,11 @@ type CreateDeckRequest struct {
     Name    string  `json:"name"`
     CardIDs []int64 `json:"card_ids"`
 }
+type UpdateDeckRequest struct {
+    DeckID  int64   `json:"deck_id"`
+    Name    string  `json:"name"`
+    CardIDs []int64 `json:"card_ids"`
+}
 type DeckCard struct {
     CardID   int64 `json:"card_id"`
     Position int   `json:"position"`
@@ -174,4 +179,118 @@ func handleGetDeck(w http.ResponseWriter, r *http.Request) {
 		Cards:     cards,
 		CreatedAt: string(createdAt),
 	})
+}
+
+func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w)
+		return
+	}
+
+	userID, err := getUserFromToken(r)
+	if err != nil {
+		if err == errUnauthorized {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	var req UpdateDeckRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.DeckID == 0 {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "deck_id is required"})
+		return
+	}
+	if len(req.CardIDs) == 0 {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one card is required"})
+		return
+	}
+
+	result, err := db.Exec(
+		"UPDATE decks SET name = ?, card_id = ? WHERE deck_id = ? AND player_id = ?",
+		req.Name, req.CardIDs[0], req.DeckID, userID,
+	)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update deck"})
+		return
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": "deck not found"})
+		return
+	}
+
+	if len(req.CardIDs) > 0 {
+		_, _ = db.Exec("DELETE FROM deck_cards WHERE deck_id = ?", req.DeckID)
+		for i, cardID := range req.CardIDs {
+			_, _ = db.Exec(
+				"INSERT INTO deck_cards (deck_id, card_id, position) VALUES (?, ?, ?)",
+				req.DeckID, cardID, i,
+			)
+		}
+	}
+
+	respondJSON(w, http.StatusOK, DeckResponse{
+		DeckID: req.DeckID,
+		Name: req.Name,
+		CardIDs: req.CardIDs,
+		Cards: []DeckCard{},
+		CreatedAt: time.Now().Format(time.RFC3339),
+	})
+}
+
+func handleDeleteDeck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w)
+		return
+	}
+	userID, err := getUserFromToken(r)
+	if err != nil {
+		if err == errUnauthorized {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	deckIDStr := r.URL.Query().Get("deck_id")
+	if deckIDStr == "" {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "deck_id is required"})
+		return
+	}
+
+	var deckID int64
+	if _, err := fmt.Sscanf(deckIDStr, "%d", &deckID); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid deck_id"})
+		return
+	}
+
+	result, err := db.Exec(
+		"DELETE FROM decks WHERE deck_id = ? AND player_id = ?", 
+		deckID, userID,
+	)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete deck"})
+		return
+	}
+
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": "deck not found"})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "deck deleted"})
+}
+
+func methodNotAllowed(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusMethodNotAllowed)
+	w.Write([]byte(`{"error":"method not allowed"}`))
 }
