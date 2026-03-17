@@ -35,11 +35,14 @@ type LoginRequest struct {
 }
 
 type AuthResponse struct {
-	Token     string    `json:"token"`
-	UserID    int64     `json:"user_id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Token           string    `json:"token"`
+	UserID          int64     `json:"user_id"`
+	Username        string    `json:"username"`
+	Email           string    `json:"email"`
+	IconName        string    `json:"icon_name"`
+	GoldCurrency    int       `json:"gold_currency"`
+	DiamondCurrency int       `json:"diamond_currency"`
+	ExpiresAt       time.Time `json:"expires_at"`
 }
 
 type ValidateResponse struct {
@@ -138,11 +141,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch user from database
 	var userID int64
-	var username, email, passwordHash string
+	var username, email, passwordHash, iconName, borderColour string
+	var goldCurrency, diamondCurrency int
 	err := db.QueryRow(
-		"SELECT id, username, email, password_hash FROM users WHERE username = ?",
+		"SELECT id, username, email, password_hash,icon_name, border_colour, gold_currency, diamond_currency FROM users WHERE username = ?",
 		req.Username,
-	).Scan(&userID, &username, &email, &passwordHash)
+	).Scan(&userID, &username, &email, &passwordHash, &iconName, &borderColour, &goldCurrency, &diamondCurrency)
 
 	if err == sql.ErrNoRows {
 		respondError(w, "Invalid credentials", http.StatusUnauthorized)
@@ -202,11 +206,14 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, AuthResponse{
-		Token:     token,
-		UserID:    userID,
-		Username:  username,
-		Email:     email,
-		ExpiresAt: expiresAt,
+		Token:           token,
+		UserID:          userID,
+		Username:        username,
+		Email:           email,
+		IconName:        iconName,
+		GoldCurrency:    goldCurrency,
+		DiamondCurrency: diamondCurrency,
+		ExpiresAt:       expiresAt,
 	}, http.StatusOK)
 }
 
