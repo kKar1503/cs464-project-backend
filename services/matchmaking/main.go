@@ -153,17 +153,22 @@ func findMatches() error {
 		return nil // Not enough players
 	}
 
+	ranges := make([]mmrRange, len(queue))
+	for i, player := range queue {
+		waitTime := int(time.Since(player.JoinedAt).Seconds())
+		ranges[i] = calculateMMRRange(player.MMR, waitTime)
+	}
+
 	// Try to match players
 	matched := make(map[int64]bool)
 
-	for i := 0; i < len(queue); i++ {
+	for i := range queue {
 		if matched[queue[i].UserID] {
 			continue
 		}
 
 		player1 := queue[i]
-		waitTime1 := int(time.Since(player1.JoinedAt).Seconds())
-		range1 := calculateMMRRange(player1.MMR, waitTime1)
+		range1 := ranges[i]
 
 		// Find best match for player1
 		for j := i + 1; j < len(queue); j++ {
@@ -172,8 +177,7 @@ func findMatches() error {
 			}
 
 			player2 := queue[j]
-			waitTime2 := int(time.Since(player2.JoinedAt).Seconds())
-			range2 := calculateMMRRange(player2.MMR, waitTime2)
+			range2 := ranges[j]
 
 			// Check if ranges overlap
 			if rangesOverlap(range1, range2) {
@@ -210,7 +214,6 @@ func handleCheckMatch(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	matchKey := fmt.Sprintf("match:%s", userID)
 	matchJSON, err := redisClient.Get(ctx, matchKey).Result()
-
 	if err != nil {
 		// No match found yet
 		respondJSON(w, map[string]interface{}{
