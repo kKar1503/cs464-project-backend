@@ -394,3 +394,89 @@ func TestComputeMatchesNoOverlap(t *testing.T) {
 		t.Errorf("Expected 0 matches for non-overlapping MMRs, got %d", len(matches))
 	}
 }
+
+// TestComputeMatchesNoOverlapEvenAtMaxRange tests that extremely different MMRs won't match
+func TestComputeMatchesNoOverlapEvenAtMaxRange(t *testing.T) {
+	now := time.Now()
+
+	// Players waited 100+ seconds (max range expansion)
+	// Max range is ±500, so total span is 1000 MMR
+	// These players are 1100+ MMR apart, so they should NEVER match
+	queue := []QueueEntry{
+		{
+			UserID:   1,
+			Username: "lowMMR",
+			MMR:      500,
+			JoinedAt: now.Add(-120 * time.Second), // Max expansion: [0, 1000]
+		},
+		{
+			UserID:   2,
+			Username: "highMMR",
+			MMR:      2000,
+			JoinedAt: now.Add(-120 * time.Second), // Max expansion: [1500, 2500]
+		},
+	}
+
+	matches := computeMatches(queue)
+
+	if len(matches) != 0 {
+		t.Errorf("Expected 0 matches (MMR gap too large even at max range), got %d matches", len(matches))
+		if len(matches) > 0 {
+			t.Errorf("Incorrectly matched: MMR %d with MMR %d",
+				matches[0].Player1.MMR, matches[0].Player2.MMR)
+		}
+	}
+}
+
+// TestComputeMatchesAtMaxRangeBoundary tests edge case at exact max range boundary
+func TestComputeMatchesAtMaxRangeBoundary(t *testing.T) {
+	now := time.Now()
+
+	// Test players exactly 1000 MMR apart (should NOT match)
+	// Player 1: MMR 1000, max range [500, 1500]
+	// Player 2: MMR 2000, max range [1500, 2500]
+	// These touch at 1500, so they SHOULD match (edge case)
+	queue := []QueueEntry{
+		{
+			UserID:   1,
+			Username: "player1",
+			MMR:      1000,
+			JoinedAt: now.Add(-100 * time.Second), // Max expansion
+		},
+		{
+			UserID:   2,
+			Username: "player2",
+			MMR:      2000,
+			JoinedAt: now.Add(-100 * time.Second), // Max expansion
+		},
+	}
+
+	matches := computeMatches(queue)
+
+	// They touch at exactly 1500, so they SHOULD match
+	if len(matches) != 1 {
+		t.Errorf("Expected 1 match (ranges touch at boundary), got %d matches", len(matches))
+	}
+
+	// Now test 1 MMR beyond the boundary - should NOT match
+	queue2 := []QueueEntry{
+		{
+			UserID:   1,
+			Username: "player1",
+			MMR:      1000,
+			JoinedAt: now.Add(-100 * time.Second), // Range: [500, 1500]
+		},
+		{
+			UserID:   2,
+			Username: "player2",
+			MMR:      2001,
+			JoinedAt: now.Add(-100 * time.Second), // Range: [1501, 2501]
+		},
+	}
+
+	matches2 := computeMatches(queue2)
+
+	if len(matches2) != 0 {
+		t.Errorf("Expected 0 matches (1 MMR beyond boundary), got %d matches", len(matches2))
+	}
+}
