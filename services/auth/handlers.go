@@ -49,6 +49,15 @@ type ValidateResponse struct {
 	Email    string `json:"email,omitempty"`
 }
 
+type BanRequest struct {
+	UserID int64  `json:"user_id"`
+	Reason string `json:"reason"`
+}
+
+type UnbanRequest struct {
+	UserID int64 `json:"user_id"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -139,10 +148,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Fetch user from database
 	var userID int64
 	var username, email, passwordHash string
+	var isBanned bool
+	var banReason sql.NullString
 	err := db.QueryRow(
-		"SELECT id, username, email, password_hash FROM users WHERE username = ?",
+		"SELECT id, username, email, password_hash, is_banned, ban_reason FROM users WHERE username = ?",
 		req.Username,
-	).Scan(&userID, &username, &email, &passwordHash)
+	).Scan(&userID, &username, &email, &passwordHash, &isBanned, &banReason)
 
 	if err == sql.ErrNoRows {
 		respondError(w, "Invalid credentials", http.StatusUnauthorized)
@@ -151,6 +162,16 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Database error: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if user is banned
+	if isBanned {
+		reason := "No reason provided"
+		if banReason.Valid {
+			reason = banReason.String
+		}
+		respondError(w, fmt.Sprintf("Account is banned: %s", reason), http.StatusForbidden)
 		return
 	}
 
@@ -279,12 +300,13 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 	var userID int64
 	var username, email string
 	var expiresAt time.Time
+	var isBanned bool
 	err = db.QueryRow(
-		"SELECT s.user_id, u.username, u.email, s.expires_at FROM user_sessions s "+
+		"SELECT s.user_id, u.username, u.email, s.expires_at, u.is_banned FROM user_sessions s "+
 			"JOIN users u ON s.user_id = u.id "+
 			"WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > NOW()",
 		token,
-	).Scan(&userID, &username, &email, &expiresAt)
+	).Scan(&userID, &username, &email, &expiresAt, &isBanned)
 
 	if err == sql.ErrNoRows {
 		respondJSON(w, ValidateResponse{Valid: false}, http.StatusOK)
@@ -293,6 +315,12 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Database error: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if user is banned
+	if isBanned {
+		respondJSON(w, ValidateResponse{Valid: false}, http.StatusOK)
 		return
 	}
 
@@ -425,4 +453,80 @@ func respondJSON(w http.ResponseWriter, data any, statusCode int) {
 
 func respondError(w http.ResponseWriter, message string, statusCode int) {
 	respondJSON(w, ErrorResponse{Error: message}, statusCode)
+}
+
+// handleBanUser bans a user and revokes all their sessions
+func handleBanUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req BanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.UserID == 0 {
+		respondError(w, "User ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Ban the user in database
+	_, err := db.Exec(
+		"UPDATE users SET is_banned = TRUE, banned_at = NOW(), ban_reason = ? WHERE id = ?",
+		req.Reason, req.UserID,
+	)
+	if err != nil {
+		log.Printf("Failed to ban user: %v", err)
+		respondError(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Revoke all active sessions for this user
+	if err := invalidateUserSessions(req.UserID); err != nil {
+		log.Printf("Failed to invalidate sessions: %v", err)
+	}
+
+	respondJSON(w, map[string]any{
+		"message": "User banned successfully",
+		"user_id": req.UserID,
+		"reason":  req.Reason,
+	}, http.StatusOK)
+}
+
+// handleUnbanUser unbans a user
+func handleUnbanUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req UnbanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.UserID == 0 {
+		respondError(w, "User ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Unban the user
+	_, err := db.Exec(
+		"UPDATE users SET is_banned = FALSE, banned_at = NULL, ban_reason = NULL WHERE id = ?",
+		req.UserID,
+	)
+	if err != nil {
+		log.Printf("Failed to unban user: %v", err)
+		respondError(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, map[string]any{
+		"message": "User unbanned successfully",
+		"user_id": req.UserID,
+	}, http.StatusOK)
 }

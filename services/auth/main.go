@@ -66,6 +66,8 @@ func main() {
 	mux.HandleFunc("/auth/logout", handleLogout)
 	mux.HandleFunc("/auth/validate", handleValidate)
 	mux.HandleFunc("/auth/me", handleMe)
+	mux.HandleFunc("/auth/ban", handleBanUser)
+	mux.HandleFunc("/auth/unban", handleUnbanUser)
 	mux.HandleFunc("/health", handleHealth)
 
 	// Create server
