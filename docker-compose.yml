@@ -65,7 +65,9 @@ services:
       - "${MATCHMAKING_PORT}:8001"
     environment:
       - SERVICE_PORT=8001
+      - AUTH_SERVICE_URL=http://auth:8000
       - GAMEPLAY_SERVICE_URL=http://gameplay:8002
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
       - DB_HOST=mysql
       - DB_PORT=3306
       - DB_USER=${MYSQL_USER}
@@ -98,6 +100,7 @@ services:
       - "${GAMEPLAY_PORT}:8002"
     environment:
       - SERVICE_PORT=8002
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
       - DB_HOST=mysql
       - DB_PORT=3306
       - DB_USER=${MYSQL_USER}

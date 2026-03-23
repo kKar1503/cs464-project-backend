@@ -64,12 +64,22 @@ func main() {
 	// Start background matchmaker
 	go matchmakerLoop()
 
+	// Start background expired match checker
+	go expiredMatchesLoop()
+
 	// Set up HTTP routes
 	mux := http.NewServeMux()
-	mux.HandleFunc("/matchmaking/join", handleJoinQueue)
-	mux.HandleFunc("/matchmaking/leave", handleLeaveQueue)
-	mux.HandleFunc("/matchmaking/status", handleQueueStatus)
-	mux.HandleFunc("/matchmaking/match", handleCheckMatch)
+	// Protected endpoints (require user authentication)
+	mux.HandleFunc("/matchmaking/join", requireAuth(handleJoinQueue))
+	mux.HandleFunc("/matchmaking/leave", requireAuth(handleLeaveQueue))
+	mux.HandleFunc("/matchmaking/status", requireAuth(handleQueueStatus))
+	mux.HandleFunc("/matchmaking/match", requireAuth(handleCheckMatch))
+	mux.HandleFunc("/matchmaking/accept", requireAuth(handleAcceptMatch))
+	mux.HandleFunc("/matchmaking/reject", requireAuth(handleRejectMatch))
+	mux.HandleFunc("/matchmaking/session/status", requireAuth(handleGetSessionStatus))
+	// Internal service endpoints (require internal authentication)
+	mux.HandleFunc("/matchmaking/session/end", requireInternalAuth(handleEndGame))
+	// Public endpoints
 	mux.HandleFunc("/health", handleHealth)
 
 	// Get port from environment
@@ -123,6 +133,107 @@ func matchmakerLoop() {
 			log.Printf("Error in matchmaker: %v", err)
 		}
 	}
+}
+
+// expiredMatchesLoop checks for expired matches and requeues players
+func expiredMatchesLoop() {
+	ticker := time.NewTicker(5 * time.Second) // Check every 5 seconds
+	defer ticker.Stop()
+
+	log.Println("Expired matches checker started")
+
+	for range ticker.C {
+		if err := handleExpiredMatches(); err != nil {
+			log.Printf("Error handling expired matches: %v", err)
+		}
+	}
+}
+
+// handleExpiredMatches finds expired waiting sessions and requeues both players
+func handleExpiredMatches() error {
+	rows, err := db.Query(`
+		SELECT gs.session_id, gs.player1_id, gs.player2_id,
+		       u1.username, u2.username, u1.mmr, u2.mmr
+		FROM game_sessions gs
+		JOIN users u1 ON gs.player1_id = u1.id
+		JOIN users u2 ON gs.player2_id = u2.id
+		WHERE gs.status = 'waiting'
+		  AND gs.match_expires_at IS NOT NULL
+		  AND gs.match_expires_at < NOW()
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	ctx := context.Background()
+	expiredCount := 0
+
+	for rows.Next() {
+		var sessionID, player1Username, player2Username string
+		var player1ID, player2ID int64
+		var player1MMR, player2MMR int
+
+		if err := rows.Scan(&sessionID, &player1ID, &player2ID, &player1Username, &player2Username, &player1MMR, &player2MMR); err != nil {
+			log.Printf("Error scanning expired session: %v", err)
+			continue
+		}
+
+		// Cancel the session
+		_, err = db.Exec(
+			"UPDATE game_sessions SET status = 'cancelled' WHERE session_id = ?",
+			sessionID,
+		)
+		if err != nil {
+			log.Printf("Failed to cancel expired session %s: %v", sessionID, err)
+			continue
+		}
+
+		// Requeue player 1
+		_, err = db.Exec(
+			"INSERT INTO matchmaking_queue (user_id, mmr, joined_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE joined_at = NOW()",
+			player1ID, player1MMR,
+		)
+		if err == nil {
+			queueKey := fmt.Sprintf("queue:%d", player1ID)
+			queueData := map[string]interface{}{
+				"user_id":  player1ID,
+				"username": player1Username,
+				"mmr":      player1MMR,
+			}
+			queueJSON, _ := json.Marshal(queueData)
+			redisClient.Set(ctx, queueKey, queueJSON, 0)
+		}
+
+		// Requeue player 2
+		_, err = db.Exec(
+			"INSERT INTO matchmaking_queue (user_id, mmr, joined_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE joined_at = NOW()",
+			player2ID, player2MMR,
+		)
+		if err == nil {
+			queueKey := fmt.Sprintf("queue:%d", player2ID)
+			queueData := map[string]interface{}{
+				"user_id":  player2ID,
+				"username": player2Username,
+				"mmr":      player2MMR,
+			}
+			queueJSON, _ := json.Marshal(queueData)
+			redisClient.Set(ctx, queueKey, queueJSON, 0)
+		}
+
+		// Clear match notifications
+		redisClient.Del(ctx, fmt.Sprintf("match:%d", player1ID))
+		redisClient.Del(ctx, fmt.Sprintf("match:%d", player2ID))
+
+		expiredCount++
+		log.Printf("Match expired: session %s, requeued %s and %s", sessionID, player1Username, player2Username)
+	}
+
+	if expiredCount > 0 {
+		log.Printf("Handled %d expired matches", expiredCount)
+	}
+
+	return nil
 }
 
 // MatchPair represents a matched pair of players
@@ -267,15 +378,18 @@ func handleCheckMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		respondError(w, "User ID is required", http.StatusBadRequest)
+	// Get authenticated user from context
+	authUser, err := getAuthenticatedUser(r)
+	if err != nil {
+		respondError(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
+	userID := authUser.UserID
+
 	// Check Redis for match
 	ctx := context.Background()
-	matchKey := fmt.Sprintf("match:%s", userID)
+	matchKey := fmt.Sprintf("match:%d", userID)
 	matchJSON, err := redisClient.Get(ctx, matchKey).Result()
 	if err != nil {
 		// No match found yet
