@@ -125,42 +125,27 @@ func matchmakerLoop() {
 	}
 }
 
-// findMatches attempts to match players in the queue
-func findMatches() error {
-	// Get all players in queue ordered by join time (FIFO fairness)
-	rows, err := db.Query(`
-		SELECT q.user_id, u.username, q.mmr, q.joined_at
-		FROM matchmaking_queue q
-		JOIN users u ON q.user_id = u.id
-		WHERE u.is_banned = FALSE
-		ORDER BY q.joined_at ASC
-	`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
+// MatchPair represents a matched pair of players
+type MatchPair struct {
+	Player1 QueueEntry
+	Player2 QueueEntry
+}
 
-	var queue []QueueEntry
-	for rows.Next() {
-		var entry QueueEntry
-		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.MMR, &entry.JoinedAt); err != nil {
-			log.Printf("Error scanning queue entry: %v", err)
-			continue
-		}
-		queue = append(queue, entry)
-	}
+// playerWithRange holds a player and their calculated MMR range
+type playerWithRange struct {
+	player QueueEntry
+	minMMR int
+	maxMMR int
+}
 
+// computeMatches performs the matching algorithm on a queue of players
+// This is the pure logic function that can be unit tested without database
+func computeMatches(queue []QueueEntry) []MatchPair {
 	if len(queue) < 2 {
-		return nil // Not enough players
+		return nil
 	}
 
 	// Calculate MMR ranges for all players
-	type playerWithRange struct {
-		player QueueEntry
-		minMMR int
-		maxMMR int
-	}
-
 	playersWithRanges := make([]playerWithRange, len(queue))
 	for i, player := range queue {
 		waitTime := int(time.Since(player.JoinedAt).Seconds())
@@ -183,6 +168,7 @@ func findMatches() error {
 
 	// Match players while preserving FIFO fairness
 	matched := make(map[int64]bool)
+	var matches []MatchPair
 
 	// Process in FIFO order (queue is already sorted by joined_at)
 	for i := 0; i < len(playersWithRanges); i++ {
@@ -219,17 +205,55 @@ func findMatches() error {
 			}
 		}
 
-		// If we found a match, create the session
+		// If we found a match, record it
 		if bestMatchIdx != -1 {
 			player2 := playersWithRanges[bestMatchIdx]
-
-			if _, err := createGameSession(player1.player, player2.player); err != nil {
-				log.Printf("Failed to create game session: %v", err)
-				continue
-			}
+			matches = append(matches, MatchPair{
+				Player1: player1.player,
+				Player2: player2.player,
+			})
 
 			matched[player1.player.UserID] = true
 			matched[player2.player.UserID] = true
+		}
+	}
+
+	return matches
+}
+
+// findMatches fetches the queue from database and creates game sessions for matches
+func findMatches() error {
+	// Get all players in queue ordered by join time (FIFO fairness)
+	rows, err := db.Query(`
+		SELECT q.user_id, u.username, q.mmr, q.joined_at
+		FROM matchmaking_queue q
+		JOIN users u ON q.user_id = u.id
+		WHERE u.is_banned = FALSE
+		ORDER BY q.joined_at ASC
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var queue []QueueEntry
+	for rows.Next() {
+		var entry QueueEntry
+		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.MMR, &entry.JoinedAt); err != nil {
+			log.Printf("Error scanning queue entry: %v", err)
+			continue
+		}
+		queue = append(queue, entry)
+	}
+
+	// Compute matches using pure logic function
+	matches := computeMatches(queue)
+
+	// Create game sessions for all matches
+	for _, match := range matches {
+		if _, err := createGameSession(match.Player1, match.Player2); err != nil {
+			log.Printf("Failed to create game session: %v", err)
+			continue
 		}
 	}
 
