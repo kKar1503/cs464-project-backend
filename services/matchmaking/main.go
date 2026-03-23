@@ -2,24 +2,73 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/redis/go-redis/v9"
+)
+
+var (
+	db          *sql.DB
+	redisClient *redis.Client
 )
 
 func main() {
 	log.Println("Matchmaking service starting...")
 
+	// Initialize database connection
+	var err error
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASSWORD"),
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		os.Getenv("DB_NAME"),
+	)
+
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	// Test database connection
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
+	log.Println("Connected to MySQL database")
+
+	// Initialize Redis client
+	redisClient = redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%s", os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT")),
+		Password: os.Getenv("REDIS_PASSWORD"),
+		DB:       0,
+	})
+
+	// Test Redis connection
+	ctx := context.Background()
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	log.Println("Connected to Redis")
+
+	// Start background matchmaker
+	go matchmakerLoop()
+
 	// Set up HTTP routes
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"healthy","service":"matchmaking"}`))
-	})
+	mux.HandleFunc("/matchmaking/join", handleJoinQueue)
+	mux.HandleFunc("/matchmaking/leave", handleLeaveQueue)
+	mux.HandleFunc("/matchmaking/status", handleQueueStatus)
+	mux.HandleFunc("/matchmaking/match", handleCheckMatch)
+	mux.HandleFunc("/health", handleHealth)
 
 	// Get port from environment
 	port := os.Getenv("SERVICE_PORT")
@@ -58,4 +107,139 @@ func main() {
 	}
 
 	log.Println("Server exited")
+}
+
+// matchmakerLoop runs continuously to find matches
+func matchmakerLoop() {
+	ticker := time.NewTicker(2 * time.Second) // Check every 2 seconds
+	defer ticker.Stop()
+
+	log.Println("Matchmaker loop started")
+
+	for range ticker.C {
+		if err := findMatches(); err != nil {
+			log.Printf("Error in matchmaker: %v", err)
+		}
+	}
+}
+
+// findMatches attempts to match players in the queue
+func findMatches() error {
+	// Get all players in queue ordered by join time (FIFO fairness)
+	rows, err := db.Query(`
+		SELECT q.user_id, u.username, q.mmr, q.joined_at
+		FROM matchmaking_queue q
+		JOIN users u ON q.user_id = u.id
+		WHERE u.is_banned = FALSE
+		ORDER BY q.joined_at ASC
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var queue []QueueEntry
+	for rows.Next() {
+		var entry QueueEntry
+		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.MMR, &entry.JoinedAt); err != nil {
+			log.Printf("Error scanning queue entry: %v", err)
+			continue
+		}
+		queue = append(queue, entry)
+	}
+
+	if len(queue) < 2 {
+		return nil // Not enough players
+	}
+
+	// Try to match players
+	matched := make(map[int64]bool)
+
+	for i := 0; i < len(queue); i++ {
+		if matched[queue[i].UserID] {
+			continue
+		}
+
+		player1 := queue[i]
+		waitTime1 := int(time.Since(player1.JoinedAt).Seconds())
+		range1 := calculateMMRRange(player1.MMR, waitTime1)
+
+		// Find best match for player1
+		for j := i + 1; j < len(queue); j++ {
+			if matched[queue[j].UserID] {
+				continue
+			}
+
+			player2 := queue[j]
+			waitTime2 := int(time.Since(player2.JoinedAt).Seconds())
+			range2 := calculateMMRRange(player2.MMR, waitTime2)
+
+			// Check if ranges overlap
+			if rangesOverlap(range1, range2) {
+				// Match found!
+				if _, err := createGameSession(player1, player2); err != nil {
+					log.Printf("Failed to create game session: %v", err)
+					continue
+				}
+
+				matched[player1.UserID] = true
+				matched[player2.UserID] = true
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+// handleCheckMatch allows a player to check if they've been matched
+func handleCheckMatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		respondError(w, "User ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check Redis for match
+	ctx := context.Background()
+	matchKey := fmt.Sprintf("match:%s", userID)
+	matchJSON, err := redisClient.Get(ctx, matchKey).Result()
+
+	if err != nil {
+		// No match found yet
+		respondJSON(w, map[string]interface{}{
+			"matched": false,
+		}, http.StatusOK)
+		return
+	}
+
+	// Match found! Return the match details
+	var match MatchFoundResponse
+	if err := json.Unmarshal([]byte(matchJSON), &match); err != nil {
+		respondError(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Delete the match notification (one-time retrieval)
+	redisClient.Del(ctx, matchKey)
+
+	respondJSON(w, map[string]interface{}{
+		"matched":    true,
+		"session_id": match.SessionID,
+		"opponent":   match.Opponent,
+		"your_mmr":   match.YourMMR,
+		"their_mmr":  match.TheirMMR,
+	}, http.StatusOK)
+}
+
+// Health check endpoint
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"healthy","service":"matchmaking"}`))
 }
