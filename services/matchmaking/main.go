@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"syscall"
 	"time"
 
@@ -153,34 +154,61 @@ func findMatches() error {
 		return nil // Not enough players
 	}
 
-	ranges := make([]mmrRange, len(queue))
-	for i, player := range queue {
-		waitTime := int(time.Since(player.JoinedAt).Seconds())
-		ranges[i] = calculateMMRRange(player.MMR, waitTime)
+	// Calculate MMR ranges and create interval events for sweep line algorithm
+	type playerInterval struct {
+		playerIdx int
+		minMMR    int
+		maxMMR    int
 	}
 
-	// Try to match players
+	intervals := make([]playerInterval, len(queue))
+	for i, player := range queue {
+		waitTime := int(time.Since(player.JoinedAt).Seconds())
+		mmrRange := calculateMMRRange(player.MMR, waitTime)
+		intervals[i] = playerInterval{
+			playerIdx: i,
+			minMMR:    mmrRange.min,
+			maxMMR:    mmrRange.max,
+		}
+	}
+
+	// Sort intervals by minimum MMR (sweep line start point)
+	sort.Slice(intervals, func(i, j int) bool {
+		return intervals[i].minMMR < intervals[j].minMMR
+	})
+
+	// Sweep line algorithm to find overlapping pairs in O(N log N)
 	matched := make(map[int64]bool)
 
-	for i := range queue {
-		if matched[queue[i].UserID] {
+	for i := 0; i < len(intervals); i++ {
+		if matched[queue[intervals[i].playerIdx].UserID] {
 			continue
 		}
 
-		player1 := queue[i]
-		range1 := ranges[i]
+		player1Idx := intervals[i].playerIdx
+		player1 := queue[player1Idx]
+		interval1 := intervals[i]
 
-		// Find best match for player1
-		for j := i + 1; j < len(queue); j++ {
-			if matched[queue[j].UserID] {
+		// Only check subsequent intervals whose minMMR <= interval1.maxMMR
+		// Once we hit an interval with minMMR > interval1.maxMMR, no more overlaps possible
+		for j := i + 1; j < len(intervals); j++ {
+			interval2 := intervals[j]
+
+			// Early termination: no more possible overlaps
+			if interval2.minMMR > interval1.maxMMR {
+				break
+			}
+
+			player2Idx := interval2.playerIdx
+			if matched[queue[player2Idx].UserID] {
 				continue
 			}
 
-			player2 := queue[j]
-			range2 := ranges[j]
+			// Intervals overlap (we already know interval2.minMMR <= interval1.maxMMR)
+			// Just need to verify interval1.minMMR <= interval2.maxMMR
+			if interval1.minMMR <= interval2.maxMMR {
+				player2 := queue[player2Idx]
 
-			// Check if ranges overlap
-			if rangesOverlap(range1, range2) {
 				// Match found!
 				if _, err := createGameSession(player1, player2); err != nil {
 					log.Printf("Failed to create game session: %v", err)
