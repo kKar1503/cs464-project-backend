@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -260,6 +261,155 @@ func TestComputeMatchesMultiplePlayers(t *testing.T) {
 		if match.Player2.UserID != expected[1] {
 			t.Errorf("Match %d: Expected Player2 to be %d, got %d", i, expected[1], match.Player2.UserID)
 		}
+	}
+}
+
+// TestMatchmakingLoopSimulation simulates the matchmaking loop over time
+func TestMatchmakingLoopSimulation(t *testing.T) {
+	baseTime := time.Now()
+
+	// Two players with MMR difference of 150
+	// Initial range ±100 won't match
+	// After 10 seconds (±150 range), they should match
+	tests := []struct {
+		name           string
+		player1MMR     int
+		player2MMR     int
+		tickSeconds    int
+		expectMatch    bool
+		description    string
+	}{
+		{
+			name:        "Tick 0: No match with 250 MMR gap",
+			player1MMR:  1000,
+			player2MMR:  1250,
+			tickSeconds: 0,
+			expectMatch: false,
+			description: "Ranges [900-1100] vs [1150-1350] gap of 50 MMR - no overlap",
+		},
+		{
+			name:        "Tick 10s: Match after expansion",
+			player1MMR:  1000,
+			player2MMR:  1250,
+			tickSeconds: 10,
+			expectMatch: true,
+			description: "Ranges [850-1150] vs [1100-1400] overlap at [1100-1150]",
+		},
+		{
+			name:        "Tick 0: Large gap no match",
+			player1MMR:  1000,
+			player2MMR:  1500,
+			tickSeconds: 0,
+			expectMatch: false,
+			description: "400 MMR gap too large initially",
+		},
+		{
+			name:        "Tick 50s: Large gap matches after expansion",
+			player1MMR:  1000,
+			player2MMR:  1500,
+			tickSeconds: 50,
+			expectMatch: true,
+			description: "Ranges [650-1350] vs [1150-1850] overlap at 1150-1350",
+		},
+		{
+			name:        "Tick 100s: Max range but still no match",
+			player1MMR:  500,
+			player2MMR:  2000,
+			tickSeconds: 100,
+			expectMatch: false,
+			description: "Even at max range [0-1000] vs [1500-2500], 500 MMR gap remains",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate players joining and waiting
+			queue := []QueueEntry{
+				{
+					UserID:   1,
+					Username: "player1",
+					MMR:      tt.player1MMR,
+					JoinedAt: baseTime.Add(-time.Duration(tt.tickSeconds) * time.Second),
+				},
+				{
+					UserID:   2,
+					Username: "player2",
+					MMR:      tt.player2MMR,
+					JoinedAt: baseTime.Add(-time.Duration(tt.tickSeconds) * time.Second),
+				},
+			}
+
+			// Simulate matchmaking tick at current time
+			matches := computeMatches(queue)
+
+			gotMatch := len(matches) > 0
+
+			if gotMatch != tt.expectMatch {
+				// Calculate actual ranges for debugging
+				waitTime := tt.tickSeconds
+				range1 := calculateMMRRange(tt.player1MMR, waitTime)
+				range2 := calculateMMRRange(tt.player2MMR, waitTime)
+
+				t.Errorf("%s\nExpected match=%v, got match=%v\nPlayer1 MMR %d range [%d-%d]\nPlayer2 MMR %d range [%d-%d]\n%s",
+					tt.name, tt.expectMatch, gotMatch,
+					tt.player1MMR, range1.min, range1.max,
+					tt.player2MMR, range2.min, range2.max,
+					tt.description)
+			}
+		})
+	}
+}
+
+// TestMatchmakingLoopProgressiveExpansion tests that ranges expand correctly over multiple ticks
+func TestMatchmakingLoopProgressiveExpansion(t *testing.T) {
+	baseTime := time.Now()
+
+	// Player 1: MMR 1000
+	// Player 2: MMR 1300 (300 MMR difference)
+	// Should match after 30 seconds when ranges expand to ±250
+	player1MMR := 1000
+	player2MMR := 1300
+
+	// Simulate ticks every 10 seconds
+	ticks := []struct {
+		seconds     int
+		shouldMatch bool
+	}{
+		{0, false},   // ±100: [900-1100] vs [1200-1400] - no overlap
+		{10, true},   // ±150: [850-1150] vs [1150-1450] - touch at 1150 = MATCH
+		{20, true},   // ±200: [800-1200] vs [1100-1500] - overlap at 1100-1200
+		{30, true},   // ±250: [750-1250] vs [1050-1550] - overlap at 1050-1250
+		{40, true},   // ±300: [700-1300] vs [1000-1600] - overlap at 1000-1300
+	}
+
+	for _, tick := range ticks {
+		t.Run(fmt.Sprintf("After_%ds", tick.seconds), func(t *testing.T) {
+			queue := []QueueEntry{
+				{
+					UserID:   1,
+					Username: "player1",
+					MMR:      player1MMR,
+					JoinedAt: baseTime.Add(-time.Duration(tick.seconds) * time.Second),
+				},
+				{
+					UserID:   2,
+					Username: "player2",
+					MMR:      player2MMR,
+					JoinedAt: baseTime.Add(-time.Duration(tick.seconds) * time.Second),
+				},
+			}
+
+			matches := computeMatches(queue)
+			gotMatch := len(matches) > 0
+
+			if gotMatch != tick.shouldMatch {
+				range1 := calculateMMRRange(player1MMR, tick.seconds)
+				range2 := calculateMMRRange(player2MMR, tick.seconds)
+				t.Errorf("At %ds: expected match=%v, got=%v\nRange1: [%d-%d], Range2: [%d-%d]",
+					tick.seconds, tick.shouldMatch, gotMatch,
+					range1.min, range1.max, range2.min, range2.max)
+			}
+		})
 	}
 }
 
