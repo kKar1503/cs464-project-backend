@@ -25,7 +25,6 @@ const (
 // Request/Response structures
 type RegisterRequest struct {
 	Username string `json:"username"`
-	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
@@ -38,7 +37,6 @@ type AuthResponse struct {
 	Token     string    `json:"token"`
 	UserID    int64     `json:"user_id"`
 	Username  string    `json:"username"`
-	Email     string    `json:"email"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
@@ -46,7 +44,6 @@ type ValidateResponse struct {
 	Valid    bool   `json:"valid"`
 	UserID   int64  `json:"user_id,omitempty"`
 	Username string `json:"username,omitempty"`
-	Email    string `json:"email,omitempty"`
 }
 
 type BanRequest struct {
@@ -65,7 +62,6 @@ type ErrorResponse struct {
 type SessionData struct {
 	UserID    int64  `json:"user_id"`
 	Username  string `json:"username"`
-	Email     string `json:"email"`
 	ExpiresAt int64  `json:"expires_at"`
 }
 
@@ -83,8 +79,8 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate input
-	if req.Username == "" || req.Email == "" || req.Password == "" {
-		respondError(w, "Username, email, and password are required", http.StatusBadRequest)
+	if req.Username == "" || req.Password == "" {
+		respondError(w, "Username and password are required", http.StatusBadRequest)
 		return
 	}
 
@@ -103,12 +99,12 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	// Insert user into database
 	result, err := db.Exec(
-		"INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
-		req.Username, req.Email, string(hashedPassword),
+		"INSERT INTO users (username, password_hash) VALUES (?, ?)",
+		req.Username, string(hashedPassword),
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate entry") {
-			respondError(w, "Username or email already exists", http.StatusConflict)
+			respondError(w, "Username already exists", http.StatusConflict)
 			return
 		}
 		log.Printf("Failed to create user: %v", err)
@@ -121,7 +117,6 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, map[string]any{
 		"user_id":  userID,
 		"username": req.Username,
-		"email":    req.Email,
 		"message":  "User registered successfully",
 	}, http.StatusCreated)
 }
@@ -147,13 +142,13 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch user from database
 	var userID int64
-	var username, email, passwordHash string
+	var username, passwordHash string
 	var isBanned bool
 	var banReason sql.NullString
 	err := db.QueryRow(
-		"SELECT id, username, email, password_hash, is_banned, ban_reason FROM users WHERE username = ?",
+		"SELECT id, username, password_hash, is_banned, ban_reason FROM users WHERE username = ?",
 		req.Username,
-	).Scan(&userID, &username, &email, &passwordHash, &isBanned, &banReason)
+	).Scan(&userID, &username, &passwordHash, &isBanned, &banReason)
 
 	if err == sql.ErrNoRows {
 		respondError(w, "Invalid credentials", http.StatusUnauthorized)
@@ -212,7 +207,6 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	sessionData := SessionData{
 		UserID:    userID,
 		Username:  username,
-		Email:     email,
 		ExpiresAt: expiresAt.Unix(),
 	}
 	sessionJSON, _ := json.Marshal(sessionData)
@@ -226,7 +220,6 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		Token:     token,
 		UserID:    userID,
 		Username:  username,
-		Email:     email,
 		ExpiresAt: expiresAt,
 	}, http.StatusOK)
 }
@@ -289,7 +282,6 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 					Valid:    true,
 					UserID:   sessionData.UserID,
 					Username: sessionData.Username,
-					Email:    sessionData.Email,
 				}, http.StatusOK)
 				return
 			}
@@ -298,15 +290,15 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	// Fallback to MySQL
 	var userID int64
-	var username, email string
+	var username string
 	var expiresAt time.Time
 	var isBanned bool
 	err = db.QueryRow(
-		"SELECT s.user_id, u.username, u.email, s.expires_at, u.is_banned FROM user_sessions s "+
+		"SELECT s.user_id, u.username, s.expires_at, u.is_banned FROM user_sessions s "+
 			"JOIN users u ON s.user_id = u.id "+
 			"WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > NOW()",
 		token,
-	).Scan(&userID, &username, &email, &expiresAt, &isBanned)
+	).Scan(&userID, &username, &expiresAt, &isBanned)
 
 	if err == sql.ErrNoRows {
 		respondJSON(w, ValidateResponse{Valid: false}, http.StatusOK)
@@ -328,7 +320,6 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 	sessionData := SessionData{
 		UserID:    userID,
 		Username:  username,
-		Email:     email,
 		ExpiresAt: expiresAt.Unix(),
 	}
 	sessionJSONBytes, _ := json.Marshal(sessionData)
@@ -341,7 +332,6 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 		Valid:    true,
 		UserID:   userID,
 		Username: username,
-		Email:    email,
 	}, http.StatusOK)
 }
 
@@ -370,7 +360,6 @@ func handleMe(w http.ResponseWriter, r *http.Request) {
 				respondJSON(w, map[string]any{
 					"user_id":  sessionData.UserID,
 					"username": sessionData.Username,
-					"email":    sessionData.Email,
 				}, http.StatusOK)
 				return
 			}
