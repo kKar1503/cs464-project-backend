@@ -140,6 +140,41 @@ func TestRangesOverlap(t *testing.T) {
 	}
 }
 
+// TestComputeMatchesTwoPlayersIdenticalMMR tests instant match with same MMR
+func TestComputeMatchesTwoPlayersIdenticalMMR(t *testing.T) {
+	now := time.Now()
+
+	// Two players with identical MMR should match instantly
+	queue := []QueueEntry{
+		{
+			UserID:   1,
+			Username: "player1",
+			MMR:      1000,
+			JoinedAt: now,
+		},
+		{
+			UserID:   2,
+			Username: "player2",
+			MMR:      1000,
+			JoinedAt: now,
+		},
+	}
+
+	matches := computeMatches(queue)
+
+	// Should produce exactly 1 match
+	if len(matches) != 1 {
+		t.Fatalf("Expected 1 match, got %d", len(matches))
+	}
+
+	// Verify the match
+	match := matches[0]
+	if match.Player1.UserID != 1 || match.Player2.UserID != 2 {
+		t.Errorf("Expected players 1 and 2 to match, got %d and %d",
+			match.Player1.UserID, match.Player2.UserID)
+	}
+}
+
 // TestComputeMatchesFIFO tests that FIFO fairness is preserved
 func TestComputeMatchesFIFO(t *testing.T) {
 	now := time.Now()
