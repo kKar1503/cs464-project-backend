@@ -154,71 +154,82 @@ func findMatches() error {
 		return nil // Not enough players
 	}
 
-	// Calculate MMR ranges and create interval events for sweep line algorithm
-	type playerInterval struct {
-		playerIdx int
-		minMMR    int
-		maxMMR    int
+	// Calculate MMR ranges for all players
+	type playerWithRange struct {
+		player QueueEntry
+		minMMR int
+		maxMMR int
 	}
 
-	intervals := make([]playerInterval, len(queue))
+	playersWithRanges := make([]playerWithRange, len(queue))
 	for i, player := range queue {
 		waitTime := int(time.Since(player.JoinedAt).Seconds())
 		mmrRange := calculateMMRRange(player.MMR, waitTime)
-		intervals[i] = playerInterval{
-			playerIdx: i,
-			minMMR:    mmrRange.min,
-			maxMMR:    mmrRange.max,
+		playersWithRanges[i] = playerWithRange{
+			player: player,
+			minMMR: mmrRange.min,
+			maxMMR: mmrRange.max,
 		}
 	}
 
-	// Sort intervals by minimum MMR (sweep line start point)
-	sort.Slice(intervals, func(i, j int) bool {
-		return intervals[i].minMMR < intervals[j].minMMR
+	// Create sorted index by minimum MMR for efficient overlap detection
+	sortedIndices := make([]int, len(playersWithRanges))
+	for i := range sortedIndices {
+		sortedIndices[i] = i
+	}
+	sort.Slice(sortedIndices, func(i, j int) bool {
+		return playersWithRanges[sortedIndices[i]].minMMR < playersWithRanges[sortedIndices[j]].minMMR
 	})
 
-	// Sweep line algorithm to find overlapping pairs in O(N log N)
+	// Match players while preserving FIFO fairness
 	matched := make(map[int64]bool)
 
-	for i := 0; i < len(intervals); i++ {
-		if matched[queue[intervals[i].playerIdx].UserID] {
+	// Process in FIFO order (queue is already sorted by joined_at)
+	for i := 0; i < len(playersWithRanges); i++ {
+		if matched[playersWithRanges[i].player.UserID] {
 			continue
 		}
 
-		player1Idx := intervals[i].playerIdx
-		player1 := queue[player1Idx]
-		interval1 := intervals[i]
+		player1 := playersWithRanges[i]
+		var bestMatchIdx = -1
+		var bestMatchJoinTime time.Time
 
-		// Only check subsequent intervals whose minMMR <= interval1.maxMMR
-		// Once we hit an interval with minMMR > interval1.maxMMR, no more overlaps possible
-		for j := i + 1; j < len(intervals); j++ {
-			interval2 := intervals[j]
+		// Use sweep line to find all overlapping players efficiently
+		// Find the starting point in sorted array using binary search
+		startIdx := sort.Search(len(sortedIndices), func(k int) bool {
+			return playersWithRanges[sortedIndices[k]].minMMR > player1.maxMMR
+		})
 
-			// Early termination: no more possible overlaps
-			if interval2.minMMR > interval1.maxMMR {
-				break
-			}
-
-			player2Idx := interval2.playerIdx
-			if matched[queue[player2Idx].UserID] {
+		// Check all players whose minMMR <= player1.maxMMR
+		for k := 0; k < startIdx; k++ {
+			j := sortedIndices[k]
+			if j <= i || matched[playersWithRanges[j].player.UserID] {
 				continue
 			}
 
-			// Intervals overlap (we already know interval2.minMMR <= interval1.maxMMR)
-			// Just need to verify interval1.minMMR <= interval2.maxMMR
-			if interval1.minMMR <= interval2.maxMMR {
-				player2 := queue[player2Idx]
+			player2 := playersWithRanges[j]
 
-				// Match found!
-				if _, err := createGameSession(player1, player2); err != nil {
-					log.Printf("Failed to create game session: %v", err)
-					continue
+			// Check if intervals overlap
+			if player1.minMMR <= player2.maxMMR && player2.minMMR <= player1.maxMMR {
+				// Found an overlap - pick earliest joined (FIFO fairness)
+				if bestMatchIdx == -1 || player2.player.JoinedAt.Before(bestMatchJoinTime) {
+					bestMatchIdx = j
+					bestMatchJoinTime = player2.player.JoinedAt
 				}
-
-				matched[player1.UserID] = true
-				matched[player2.UserID] = true
-				break
 			}
+		}
+
+		// If we found a match, create the session
+		if bestMatchIdx != -1 {
+			player2 := playersWithRanges[bestMatchIdx]
+
+			if _, err := createGameSession(player1.player, player2.player); err != nil {
+				log.Printf("Failed to create game session: %v", err)
+				continue
+			}
+
+			matched[player1.player.UserID] = true
+			matched[player2.player.UserID] = true
 		}
 	}
 
