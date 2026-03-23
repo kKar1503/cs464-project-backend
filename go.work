@@ -3,6 +3,7 @@ go 1.25.7
 use (
 	./db
 	./services/auth
+	./services/deck
 	./services/friendlist
 	./services/gameplay
 	./services/matchmaking

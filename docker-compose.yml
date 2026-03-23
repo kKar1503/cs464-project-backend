@@ -91,6 +91,41 @@ services:
       retries: 3
       start_period: 10s
 
+  deck:
+    build:
+      context: .
+      dockerfile: services/deck/Dockerfile
+    container_name: deck-service
+    ports:
+      - "${DECK_PORT}:8005"
+    environment:
+      - SERVICE_PORT=8005
+      - AUTH_SERVICE_URL=http://auth:8000
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${MYSQL_USER}
+      - DB_PASSWORD=${MYSQL_PASSWORD}
+      - DB_NAME=${MYSQL_DATABASE}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks:
+      - game-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8005/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      
   gameplay:
     build:
       context: .
