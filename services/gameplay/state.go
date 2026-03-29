@@ -172,7 +172,7 @@ func (gs *GameState) GetPlayerView(playerID PlayerID) *PlayerView {
 	return view
 }
 
-// ComputeHash computes the xxHash64 of this player view
+// ComputeHash computes the xxhash64 of this player view
 func (pv *PlayerView) ComputeHash() uint64 {
 	h := xxhash.New()
 

@@ -13,7 +13,6 @@ type HandlerContext interface {
 	GetGameState() GameState
 	GetPlayerState(playerID int) PlayerState
 	GetOpponentID() int
-
 	// State verification
 	GetCurrentSequence() int64
 	GetPlayerView(playerID int) PlayerView
@@ -67,8 +66,9 @@ type PlayerView struct {
 	// Your info
 	YourUserID   int64       `json:"your_user_id"`
 	YourUsername string      `json:"your_username"`
+	
 	YourGameData interface{} `json:"your_game_data,omitempty"` // Parsed game data
-
+	
 	// Opponent info
 	OpponentUserID    int64       `json:"opponent_user_id"`
 	OpponentUsername  string      `json:"opponent_username"`
