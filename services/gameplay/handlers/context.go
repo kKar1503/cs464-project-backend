@@ -1,5 +1,8 @@
 package handlers
 
+import (
+	"time"
+)
 // HandlerContext provides the interface for handlers to interact with game state
 // This allows handlers to be decoupled from the main package implementation
 type HandlerContext interface {
@@ -81,9 +84,13 @@ type PlayerView struct {
 }
 
 type Card struct {
-	
-} 
-
+	CardID        int
+	ElixirCost    int
+	CurrentHealth int
+	CardAttack    int
+	TimeToAttack  int
+	LastMessage   time.Time
+}
 type GameplayManager interface {
 	GetElixer(playerID int64) int 
 	RemoveElixer(playerID int64, amount int)
