@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-
 	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
 )
 
@@ -194,7 +193,7 @@ type GameplayAdapter struct {
 	gameplay *GameplayManager
 }
 
-func (gpa *GameplayAdapter) GetElixir(playerID int64) int {
+func (gpa *GameplayAdapter) GetElixer(playerID int64) int {
 	if playerID == gpa.gameplay.player1ID {
 		return gpa.gameplay.game.ElixerPlayer1
 	} else {
@@ -214,7 +213,7 @@ func (gpa *GameplayAdapter) RemoveElixer(playerID int64, elixerToRemove int) {
 	}
 }
 
-func (gpa *GameplayAdapter) GetBoard(playerID int64) (*[2][3]Card, *[2][3]Card) {
+func (gpa *GameplayAdapter) GetBoard(playerID int64) (*[2][3]handlers.Card, *[2][3]handlers.Card) {
 	if playerID == gpa.gameplay.player1ID {
 		return gpa.gameplay.game.BoardPlayer1, gpa.gameplay.game.BoardPlayer2
 	}

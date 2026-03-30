@@ -3,25 +3,17 @@ package main
 import (
 	"sync"
 	"time"
+	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
 )
-
-type Card struct {
-	CardID        int
-	ElixirCost    int
-	CurrentHealth int
-	CardAttack    int
-	TimeToAttack  int
-	LastMessage   time.Time
-}
 
 type GameplayState struct {
 	SessionID     string
 	Player1Health int
 	Player2Health int
 	ElixerPlayer1 int
-	BoardPlayer1  *[2][3]Card
+	BoardPlayer1  *[2][3]handlers.Card
 	ElixerPlayer2 int
-	BoardPlayer2  *[2][3]Card
+	BoardPlayer2  *[2][3]handlers.Card
 	RoundNumber   int
 }
 
@@ -39,8 +31,8 @@ type GameplayManager struct {
 }
 
 func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *GameplayManager {
-	var BoardPlayer1 [2][3]Card
-	var BoardPlayer2 [2][3]Card
+	var BoardPlayer1 [2][3]handlers.Card
+	var BoardPlayer2 [2][3]handlers.Card
 	var ticker = time.NewTicker(5 * time.Second)
 	var done = make(chan bool)
 	var gh = &GameplayManager{
@@ -92,7 +84,8 @@ func (gh *GameplayManager) PlayCard(cardId int, playerID int64, xPos int, yPos i
 	var isPlayer1 bool = playerID == gh.player1ID // TODO: Actually do the proper validation
 
 	// TODO: Actually retrieve the card information from database OR implement it such that it is sent over by frontend
-	var card Card = Card{
+	var card handlers.Card = handlers.Card{
+		
 		CardID:        cardId,
 		ElixirCost:    0,
 		CurrentHealth: 0,
@@ -135,7 +128,7 @@ func (gh *GameplayManager) EndGameplay() {
 // Helper functions
 // TODO: Add verification to check whether the card is allowed to attack
 // TODO: Replace this with a for loop (you wont)
-func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]Card, defendingPlayer *[2][3]Card, playerHealth *int) {
+func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]handlers.Card, defendingPlayer *[2][3]handlers.Card, playerHealth *int) {
 	if (*defendingPlayer)[0][attackX].CardID == 0 && (*defendingPlayer)[0][attackX].CardID == 0 {
 		*playerHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
 		(*defendingPlayer)[attackY][attackX].CurrentHealth -= 5 // To be replaced by the actual attack health
@@ -152,7 +145,7 @@ func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]Card, defendin
 	}
 }
 
-func placeCard(xPos int, yPos int, board *[2][3]Card, card *Card) {
+func placeCard(xPos int, yPos int, board *[2][3]handlers.Card, card *handlers.Card) {
 	if board[xPos][yPos].CardID != 0 {
 		// cause some sort of error
 	}
