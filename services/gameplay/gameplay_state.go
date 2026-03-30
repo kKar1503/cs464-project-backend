@@ -1,8 +1,11 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"sync"
 	"time"
+
 	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
 )
 
@@ -48,8 +51,8 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 		},
 		player1ID: player1ID,
 		player2ID: player2ID,
-		ticker: ticker,
-		done:   done,
+		ticker:    ticker,
+		done:      done,
 	}
 
 	go gh.generateElixer(ticker, done)
@@ -80,29 +83,25 @@ func (gh *GameplayManager) DrawRound() {
 	gh.ticker.Reset(5 * time.Second)
 }
 
-func (gh *GameplayManager) PlayCard(cardId int, playerID int64, xPos int, yPos int) error {
-	var isPlayer1 bool = playerID == gh.player1ID // TODO: Actually do the proper validation
+func (gh *GameplayManager) PlayCard(playerID int64, card *handlers.Card, xPos int, yPos int) error {
+	var isPlayer1 bool = playerID == gh.player1ID
 
-	// TODO: Actually retrieve the card information from database OR implement it such that it is sent over by frontend
-	var card handlers.Card = handlers.Card{
-		
-		CardID:        cardId,
-		ElixirCost:    0,
-		CurrentHealth: 0,
-		CardAttack:    0,
-		TimeToAttack:  0,
-		LastMessage:   time.Now(),
-	}
 	if isPlayer1 {
-		placeCard(xPos, yPos, gh.game.BoardPlayer1, &card)
+		err := placeCard(xPos, yPos, gh.game.BoardPlayer1, card)
+		if err != nil {
+			return err
+		}
 		gh.elixerMutex1.Lock()
 		defer gh.elixerMutex1.Unlock()
-		gh.game.ElixerPlayer1 -= card.ElixirCost
+		gh.game.ElixerPlayer1 -= card.ElixerCost
 	} else {
-		placeCard(xPos, yPos, gh.game.BoardPlayer2, &card)
+		err := placeCard(xPos, yPos, gh.game.BoardPlayer2, card)
+		if err != nil {
+			return err
+		}
 		gh.elixerMutex2.Lock()
 		defer gh.elixerMutex2.Unlock()
-		gh.game.ElixerPlayer2 -= card.ElixirCost
+		gh.game.ElixerPlayer2 -= card.ElixerCost
 	}
 
 	return nil
@@ -128,7 +127,11 @@ func (gh *GameplayManager) EndGameplay() {
 // Helper functions
 // TODO: Add verification to check whether the card is allowed to attack
 // TODO: Replace this with a for loop (you wont)
-func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]handlers.Card, defendingPlayer *[2][3]handlers.Card, playerHealth *int) {
+func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]handlers.Card, defendingPlayer *[2][3]handlers.Card, playerHealth *int) error {
+	if attackingPlayer[attackY][attackX].LastMessage.Sub(time.Now()) < time.Duration(attackingPlayer[attackY][attackX].TimeToAttack)*time.Second {
+		return errors.New("Attack Message sent too early")
+	}
+
 	if (*defendingPlayer)[0][attackX].CardID == 0 && (*defendingPlayer)[0][attackX].CardID == 0 {
 		*playerHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
 		(*defendingPlayer)[attackY][attackX].CurrentHealth -= 5 // To be replaced by the actual attack health
@@ -143,12 +146,17 @@ func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]handlers.Card,
 			(*defendingPlayer)[0][attackX].CardID = 0
 		}
 	}
+
+	attackingPlayer[attackY][attackX].LastMessage = time.Now()
+	return nil
 }
 
-func placeCard(xPos int, yPos int, board *[2][3]handlers.Card, card *handlers.Card) {
+func placeCard(xPos int, yPos int, board *[2][3]handlers.Card, card *handlers.Card) error {
 	if board[xPos][yPos].CardID != 0 {
 		// cause some sort of error
+		return fmt.Errorf("Card already exists")
 	}
 	// This looks wrong
 	board[xPos][yPos] = *card
+	return nil
 }

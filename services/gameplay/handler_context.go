@@ -220,8 +220,12 @@ func (gpa *GameplayAdapter) GetBoard(playerID int64) (*[2][3]handlers.Card, *[2]
 	return gpa.gameplay.game.BoardPlayer2, gpa.gameplay.game.BoardPlayer1
 }
 
+func (gpa* GameplayAdapter) PlaceCard (playerID int64, card *handlers.Card, xPos int, yPos int) error {
+	return gpa.gameplay.PlayCard(playerID, card, xPos, yPos)
+}
+
 func (gpa *GameplayAdapter) GetPlayer1ID() int64 {
-	return gpa.gameplay.player1ID;
+	return gpa.gameplay.player1ID
 }
 
 // GameStateAdapter adapts GameState to handlers.GameState interface
