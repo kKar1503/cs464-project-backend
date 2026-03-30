@@ -83,12 +83,6 @@ func main() {
 	mux.HandleFunc("/ws", handleWebSocket)
 	mux.HandleFunc("/game/stats", handleGameStats)
 
-	// set up http routes for deck service
-	mux.HandleFunc("/deck/create", handleCreateDeck)
-	mux.HandleFunc("/deck/get", handleGetDeck)
-	mux.HandleFunc("/deck/update", handleUpdateDeck)
-	mux.HandleFunc("/deck/delete", handleDeleteDeck)
-
 	// Get port from environment
 	port := os.Getenv("SERVICE_PORT")
 	if port == "" {
