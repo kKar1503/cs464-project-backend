@@ -85,7 +85,7 @@ type PlayerView struct {
 
 type Card struct {
 	CardID        int
-	ElixirCost    int
+	ElixerCost    int
 	CurrentHealth int
 	CardAttack    int
 	TimeToAttack  int
@@ -97,4 +97,5 @@ type GameplayManager interface {
 	GetPlayer1ID() int64
 	// First board is the player's, the second is the opponent's 
 	GetBoard(playerID int64) (*[2][3]Card, *[2][3]Card)
+	PlaceCard(playerID int64, card *Card, xPos int, yPos int) error
 }
