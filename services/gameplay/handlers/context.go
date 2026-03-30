@@ -13,6 +13,8 @@ type HandlerContext interface {
 	GetGameState() GameState
 	GetPlayerState(playerID int) PlayerState
 	GetOpponentID() int
+	GetGameplayManager() GameplayManager
+	
 	// State verification
 	GetCurrentSequence() int64
 	GetPlayerView(playerID int) PlayerView
@@ -76,4 +78,16 @@ type PlayerView struct {
 	OpponentGameData  interface{} `json:"opponent_game_data,omitempty"` // Parsed opponent game data
 
 	StateHash uint64 `json:"state_hash"`
+}
+
+type Card struct {
+	
+} 
+
+type GameplayManager interface {
+	GetElixer(playerID int64) int 
+	RemoveElixer(playerID int64, amount int)
+	GetPlayer1ID() int64
+	// First board is the player's, the second is the opponent's 
+	GetBoard(playerID int64) (*[2][3]Card, *[2][3]Card)
 }
