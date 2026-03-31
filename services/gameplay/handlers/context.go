@@ -96,6 +96,6 @@ type GameplayManager interface {
 	RemoveElixer(playerID int64, amount int)
 	GetPlayer1ID() int64
 	// First board is the player's, the second is the opponent's 
-	GetBoard(playerID int64) (*[2][3]Card, *[2][3]Card)
 	PlaceCard(playerID int64, card *Card, xPos int, yPos int) error
+	AttackCard(playerID int64, xPos int, yPos int) error
 }

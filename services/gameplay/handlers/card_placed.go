@@ -27,7 +27,8 @@ func HandleCardPlaced(ctx HandlerContext, msg *ClientMessage) error {
 	// Somehow check if there is valid elixir for
 	var GameplayManager = ctx.GetGameplayManager()
 	// var isPlayer1 = GameplayManager.GetPlayer1ID() == cardPlaced.PlayerID;
-
+	
+	// TODO: Get the proper card request from the other service
 	card := &Card{
 		CardID:        cardPlaced.CardID,
 		ElixerCost:    0,

@@ -107,16 +107,16 @@ func (gh *GameplayManager) PlayCard(playerID int64, card *handlers.Card, xPos in
 	return nil
 }
 
-func (gh *GameplayManager) AttackCard(attackX int, attackY int, playerID int64) {
+func (gh *GameplayManager) AttackCard(playerID int64, attackX int, attackY int) error {
 	var isPlayer1 bool = playerID == gh.player1ID // Replace this with a valid check later
 
 	gh.boardMutexAttack.Lock()
 	defer gh.boardMutexAttack.Unlock()
 	if isPlayer1 {
-		attackBoard(attackX, attackY, gh.game.BoardPlayer1, gh.game.BoardPlayer2, &gh.game.Player2Health)
-	} else {
-		attackBoard(attackX, attackY, gh.game.BoardPlayer2, gh.game.BoardPlayer1, &gh.game.Player1Health)
+		return attackBoard(attackX, attackY, gh.game.BoardPlayer1, gh.game.BoardPlayer2, &gh.game.Player2Health)
 	}
+	return attackBoard(attackX, attackY, gh.game.BoardPlayer2, gh.game.BoardPlayer1, &gh.game.Player1Health)
+
 }
 
 func (gh *GameplayManager) EndGameplay() {
