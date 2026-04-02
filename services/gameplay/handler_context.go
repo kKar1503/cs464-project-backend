@@ -226,6 +226,20 @@ func (gpa *GameplayAdapter) GetPlayer1ID() int64 {
 	return gpa.gameplay.player1ID
 }
 
+func (gpa *GameplayAdapter) GetBoard(playerID int64) (yours *[2][3]handlers.Card, opponents *[2][3]handlers.Card) {
+	if playerID == gpa.gameplay.player1ID {
+		return gpa.gameplay.game.BoardPlayer1, gpa.gameplay.game.BoardPlayer2
+	}
+	return gpa.gameplay.game.BoardPlayer2, gpa.gameplay.game.BoardPlayer1
+}
+
+func (gpa *GameplayAdapter) GetPlayerHealth(playerID int64) (you *int, opponent *int) {
+	if playerID == gpa.gameplay.player1ID {
+		return &gpa.gameplay.game.Player1Health, &gpa.gameplay.game.Player2Health
+	}
+	return &gpa.gameplay.game.Player2Health, &gpa.gameplay.game.Player1Health
+}
+
 // GameStateAdapter adapts GameState to handlers.GameState interface
 type GameStateAdapter struct {
 	state *GameState
