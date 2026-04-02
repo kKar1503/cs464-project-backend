@@ -273,3 +273,31 @@ func GivePackToPlayer(playerID int64) (int64, string, error) {
 	packID, _ := result.LastInsertId()
 	return packID, packType, nil
 }
+
+func handleBuyPack(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	userID, err := getUserFromToken(r)
+	if err != nil {
+		if err == errUnauthorized {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	packID, packType, err := GivePackToPlayer(userID)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create pack"})
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, map[string]interface{}{
+		"pack_id":   packID,
+		"pack_type": packType,
+		"message":   "Pack acquired successfully",
+	})
+}

@@ -57,8 +57,9 @@ func main() {
     mux.HandleFunc("/deck/update", handleUpdateDeck)
     mux.HandleFunc("/deck/delete", handleDeleteDeck)
 
-	// set up http routes for pack apis
-	mux.HandleFunc("/pack/get", handleGetPacks)
+    // set up http routes for pack apis
+    mux.HandleFunc("/pack/buy", handleBuyPack)
+    mux.HandleFunc("/pack/get", handleGetPacks)
     mux.HandleFunc("/pack/open", handleOpenPack)
 
     port := os.Getenv("SERVICE_PORT")
