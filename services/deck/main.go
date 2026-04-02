@@ -46,7 +46,10 @@ func main() {
         w.Write([]byte(`{"status":"healthy","service":"deck"}`))
     })
 
-	// set up http routes for deck apis
+    // set up http routes for card apis
+    mux.HandleFunc("/cards", handleGetAllCards)
+
+    // set up http routes for deck apis
     mux.HandleFunc("/deck/create", handleCreateDeck)
     mux.HandleFunc("/deck/get", handleGetDeck)
     mux.HandleFunc("/deck/update", handleUpdateDeck)

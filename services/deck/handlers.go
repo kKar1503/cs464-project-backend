@@ -294,3 +294,57 @@ func methodNotAllowed(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusMethodNotAllowed)
 	w.Write([]byte(`{"error":"method not allowed"}`))
 }
+
+type CardResponse struct {
+	CardID      int    `json:"card_id"`
+	CardName    string `json:"card_name"`
+	Affiliation int    `json:"affiliation"`
+	Rarity      string `json:"rarity"`
+	ManaCost    int    `json:"mana_cost"`
+	MaxLevel    int    `json:"max_level"`
+	Description string `json:"description"`
+	IconURL     string `json:"icon_url"`
+}
+
+func handleGetAllCards(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+
+	query := "SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url FROM cards WHERE 1=1"
+	args := []interface{}{}
+
+	if rarity := r.URL.Query().Get("rarity"); rarity != "" {
+		query += " AND rarity = ?"
+		args = append(args, rarity)
+	}
+	if affiliation := r.URL.Query().Get("affiliation"); affiliation != "" {
+		query += " AND affiliation = ?"
+		args = append(args, affiliation)
+	}
+
+	query += " ORDER BY card_id ASC"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get cards"})
+		return
+	}
+	defer rows.Close()
+
+	var cards []CardResponse
+	for rows.Next() {
+		var c CardResponse
+		if err := rows.Scan(&c.CardID, &c.CardName, &c.Affiliation, &c.Rarity, &c.ManaCost, &c.MaxLevel, &c.Description, &c.IconURL); err != nil {
+			continue
+		}
+		cards = append(cards, c)
+	}
+
+	if cards == nil {
+		cards = []CardResponse{}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{"cards": cards, "count": len(cards)})
+}
