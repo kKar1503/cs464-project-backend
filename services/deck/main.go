@@ -48,6 +48,8 @@ func main() {
 
     // set up http routes for card apis
     mux.HandleFunc("/cards", handleGetAllCards)
+    mux.HandleFunc("/player/cards", handleGetPlayerCards)
+    mux.HandleFunc("/player/cards/not-in-decks", handleGetCardsNotInDecks)
 
     // set up http routes for deck apis
     mux.HandleFunc("/deck/create", handleCreateDeck)
