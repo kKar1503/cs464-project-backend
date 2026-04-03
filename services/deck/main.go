@@ -45,10 +45,22 @@ func main() {
         w.WriteHeader(http.StatusOK)
         w.Write([]byte(`{"status":"healthy","service":"deck"}`))
     })
+
+    // set up http routes for card apis
+    mux.HandleFunc("/cards", handleGetAllCards)
+    mux.HandleFunc("/player/cards", handleGetPlayerCards)
+    mux.HandleFunc("/player/cards/not-in-decks", handleGetCardsNotInDecks)
+
+    // set up http routes for deck apis
     mux.HandleFunc("/deck/create", handleCreateDeck)
     mux.HandleFunc("/deck/get", handleGetDeck)
     mux.HandleFunc("/deck/update", handleUpdateDeck)
     mux.HandleFunc("/deck/delete", handleDeleteDeck)
+
+    // set up http routes for pack apis
+    mux.HandleFunc("/pack/buy", handleBuyPack)
+    mux.HandleFunc("/pack/get", handleGetPacks)
+    mux.HandleFunc("/pack/open", handleOpenPack)
 
     port := os.Getenv("SERVICE_PORT")
     if port == "" {
