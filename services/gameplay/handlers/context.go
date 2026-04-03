@@ -91,24 +91,24 @@ type OnDeath func(playerId int64, gameplayManager GameplayManager, attackX int, 
 
 func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]Card, defendingPlayer *[2][3]Card, playerHealth *int) int {
 	y_coord := -1
-	if (*defendingPlayer)[0][attackX].CardID == 0 && (*defendingPlayer)[1][attackX].CardID == 0 {
+	if (*defendingPlayer)[0][attackY].CardID == 0 && (*defendingPlayer)[1][attackY].CardID == 0 {
 		*playerHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		(*attackingPlayer)[attackY][attackX].CurrentHealth -= 5 // To be replaced by the actual attack health
-	} else if (*defendingPlayer)[0][attackX].CardID == 0 {
-		(*defendingPlayer)[1][attackX].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		if (*defendingPlayer)[1][attackX].CurrentHealth == 0 {
-			(*defendingPlayer)[1][attackX].CardID = 0
+		(*attackingPlayer)[attackX][attackY].CurrentHealth -= 5 // To be replaced by the actual attack health
+	} else if (*defendingPlayer)[0][attackY].CardID == 0 {
+		(*defendingPlayer)[1][attackY].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
+		if (*defendingPlayer)[1][attackY].CurrentHealth == 0 {
+			(*defendingPlayer)[1][attackY].CardID = 0
 		}
 		y_coord = 1
 	} else {
-		(*defendingPlayer)[0][attackX].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		if (*defendingPlayer)[0][attackX].CurrentHealth == 0 {
-			(*defendingPlayer)[0][attackX].CardID = 0
+		(*defendingPlayer)[0][attackY].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
+		if (*defendingPlayer)[0][attackY].CurrentHealth == 0 {
+			(*defendingPlayer)[0][attackY].CardID = 0
 		}
 		y_coord = 0
 	}
 
-	attackingPlayer[attackY][attackX].LastMessage = time.Now()
+	attackingPlayer[attackX][attackY].LastMessage = time.Now()
 	return y_coord
 }
 
@@ -125,14 +125,14 @@ var attackRegistry = map[string]OnAttack{
 		var self, opponent = gameplayManager.GetBoard(playerID)
 		var myHealth, opponentHealth = gameplayManager.GetPlayerHealth(playerID)
 		if randX == -1 && randY == -1 {
-			*myHealth -= (*self)[attackY][attackY].CardAttack
+			*myHealth -= (*self)[attackX][attackY].CardAttack
 		} else if randX == -2 && randY == -2 {
-			*opponentHealth -= (*self)[attackY][attackY].CardAttack
-			(*self)[attackY][attackY].CurrentHealth -= 5
+			*opponentHealth -= (*self)[attackX][attackY].CardAttack
+			(*self)[attackX][attackY].CurrentHealth -= 5
 		} else if randX/2 >= 2 {
-			(*opponent)[randX-2][randY].CurrentHealth -= (*self)[attackY][attackY].CardAttack
+			(*opponent)[randX-2][randY].CurrentHealth -= (*self)[attackX][attackY].CardAttack
 		} else {
-			(*self)[randX][randY].CurrentHealth -= (*self)[attackY][attackY].CardAttack
+			(*self)[randX][randY].CurrentHealth -= (*self)[attackX][attackY].CardAttack
 		}
 	},
 	// TODO: To be implemented on a later date cause I still havent figured out how I want to do this
@@ -141,8 +141,8 @@ var attackRegistry = map[string]OnAttack{
 		var _, opponentHealth = gameplayManager.GetPlayerHealth(playerID)
 
 		if randX < 0 && randY < 0 {
-			*opponentHealth -= (*self)[attackY][attackY].CardAttack
-			(*self)[attackY][attackY].CurrentHealth -= 5
+			*opponentHealth -= (*self)[attackX][attackY].CardAttack
+			(*self)[attackX][attackY].CurrentHealth -= 5
 		} else {
 			(*opponent)[randX-2][randY].CurrentHealth -= (*self)[attackY][attackY].CardAttack
 		}
@@ -151,19 +151,19 @@ var attackRegistry = map[string]OnAttack{
 		var self, opponent = gameplayManager.GetBoard(playerID)
 		var myHealth, _ = gameplayManager.GetPlayerHealth(playerID)
 		attackBoard(attackX, attackY, self, opponent, myHealth)
-		(*self)[attackY][attackX].CurrentHealth -= 10
+		(*self)[attackX][attackY].CurrentHealth -= 10
 	},
 	"back_row": func(playerID int64, gameplayManager GameplayManager, attackX int, attackY int, randX int, randY int) {
 		var self, opponent = gameplayManager.GetBoard(playerID)
 		var myHealth, _ = gameplayManager.GetPlayerHealth(playerID)
 
-		if (*opponent)[1][attackX].CardID == 0 {
+		if (*opponent)[1][attackY].CardID == 0 {
 			*myHealth -= (*self)[attackX][attackY].CardAttack
-			(*self)[attackY][attackX].CurrentHealth -= 5 // To be replaced by the actual attack health
+			(*self)[attackX][attackY].CurrentHealth -= 5 // To be replaced by the actual attack health
 		} else {
-			(*opponent)[1][attackX].CurrentHealth -= (*self)[attackX][attackY].CardAttack
-			if (*opponent)[1][attackX].CurrentHealth == 0 {
-				(*opponent)[1][attackX].CardID = 0
+			(*opponent)[1][attackY].CurrentHealth -= (*self)[attackX][attackY].CardAttack
+			if (*opponent)[1][attackY].CurrentHealth == 0 {
+				(*opponent)[1][attackY].CardID = 0
 			}
 		}
 	},
@@ -195,7 +195,7 @@ type SummonParam struct {
 var summonRegistry = map[string]OnSpawn{
 	"basic": func(summonParam SummonParam) {
 		var yours, _ = summonParam.gameplayManager.GetBoard(summonParam.playerID)
-		yours[summonParam.attackY][summonParam.attackX] = (*summonParam.card)
+		yours[summonParam.attackX][summonParam.attackY] = (*summonParam.card)
 	},
 	"technoblade": func(summonParam SummonParam) {
 
