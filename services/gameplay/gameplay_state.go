@@ -128,26 +128,26 @@ func (gh *GameplayManager) EndGameplay() {
 // TODO: Add verification to check whether the card is allowed to attack
 // TODO: Replace this with a for loop (you wont)
 func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]handlers.Card, defendingPlayer *[2][3]handlers.Card, playerHealth *int) error {
-	if attackingPlayer[attackY][attackX].LastMessage.Sub(time.Now()) < time.Duration(attackingPlayer[attackY][attackX].TimeToAttack)*time.Second {
+	if attackingPlayer[attackX][attackY].LastMessage.Sub(time.Now()) < time.Duration(attackingPlayer[attackX][attackY].TimeToAttack)*time.Second {
 		return errors.New("Attack Message sent too early")
 	}
 
-	if (*defendingPlayer)[0][attackX].CardID == 0 && (*defendingPlayer)[0][attackX].CardID == 0 {
+	if (*defendingPlayer)[0][attackY].CardID == 0 && (*defendingPlayer)[0][attackY].CardID == 0 {
 		*playerHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		(*defendingPlayer)[attackY][attackX].CurrentHealth -= 5 // To be replaced by the actual attack health
-	} else if (*defendingPlayer)[0][attackX].CardID == 0 {
-		(*defendingPlayer)[1][attackX].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		if (*defendingPlayer)[1][attackX].CurrentHealth == 0 {
-			(*defendingPlayer)[1][attackX].CardID = 0
+		(*defendingPlayer)[attackX][attackY].CurrentHealth -= 5 // To be replaced by the actual attack health
+	} else if (*defendingPlayer)[0][attackY].CardID == 0 {
+		(*defendingPlayer)[1][attackY].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
+		if (*defendingPlayer)[1][attackY].CurrentHealth == 0 {
+			(*defendingPlayer)[1][attackY].CardID = 0
 		}
 	} else {
-		(*defendingPlayer)[0][attackX].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		if (*defendingPlayer)[0][attackX].CurrentHealth == 0 {
-			(*defendingPlayer)[0][attackX].CardID = 0
+		(*defendingPlayer)[0][attackY].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
+		if (*defendingPlayer)[0][attackY].CurrentHealth == 0 {
+			(*defendingPlayer)[0][attackY].CardID = 0
 		}
 	}
 
-	attackingPlayer[attackY][attackX].LastMessage = time.Now()
+	attackingPlayer[attackX][attackY].LastMessage = time.Now()
 	return nil
 }
 
