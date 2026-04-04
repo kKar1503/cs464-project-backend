@@ -38,6 +38,10 @@ func (ctx *PlayerConnectionContext) GetGameState() handlers.GameState {
 	return &GameStateAdapter{state: ctx.conn.Session.State}
 }
 
+func (ctx *PlayerConnectionContext) GetGameplayManager() handlers.GameplayManager {
+	return &GameplayAdapter{gameplay: ctx.conn.Session.GameplayManager}
+}
+
 func (ctx *PlayerConnectionContext) GetPlayerState(playerID int) handlers.PlayerState {
 	ps := ctx.conn.Session.State.GetPlayerState(PlayerID(playerID))
 	return &PlayerStateAdapter{state: ps}
@@ -183,6 +187,57 @@ func (ctx *PlayerConnectionContext) ExecuteServerAction(action string, params in
 		PlayerID: ctx.conn.PlayerID,
 	}
 	return serverCtx.ExecuteServerAction(GameAction(action), params)
+}
+
+// I do not know the point to this just follow like blind sheep
+type GameplayAdapter struct {
+	gameplay *GameplayManager
+}
+
+func (gpa *GameplayAdapter) GetElixer(playerID int64) int {
+	if playerID == gpa.gameplay.player1ID {
+		return gpa.gameplay.game.ElixerPlayer1
+	} else {
+		return gpa.gameplay.game.ElixerPlayer2
+	}
+}
+
+func (gpa *GameplayAdapter) RemoveElixer(playerID int64, elixerToRemove int) {
+	if playerID == gpa.gameplay.player1ID {
+		gpa.gameplay.elixerMutex1.Lock()
+		defer gpa.gameplay.elixerMutex1.Unlock()
+		gpa.gameplay.game.ElixerPlayer1 -= elixerToRemove
+	} else {
+		gpa.gameplay.elixerMutex2.Lock()
+		defer gpa.gameplay.elixerMutex2.Unlock()
+		gpa.gameplay.game.ElixerPlayer2 -= elixerToRemove
+	}
+}
+
+func (gpa *GameplayAdapter) AttackCard(playerID int64, xPos int, yPos int) error {
+	return gpa.gameplay.AttackCard(playerID, xPos, yPos)
+}
+
+func (gpa *GameplayAdapter) PlaceCard(playerID int64, card *handlers.Card, xPos int, yPos int) error {
+	return gpa.gameplay.PlayCard(playerID, card, xPos, yPos)
+}
+
+func (gpa *GameplayAdapter) GetPlayer1ID() int64 {
+	return gpa.gameplay.player1ID
+}
+
+func (gpa *GameplayAdapter) GetBoard(playerID int64) (yours *[2][3]handlers.Card, opponents *[2][3]handlers.Card) {
+	if playerID == gpa.gameplay.player1ID {
+		return gpa.gameplay.game.BoardPlayer1, gpa.gameplay.game.BoardPlayer2
+	}
+	return gpa.gameplay.game.BoardPlayer2, gpa.gameplay.game.BoardPlayer1
+}
+
+func (gpa *GameplayAdapter) GetPlayerHealth(playerID int64) (you *int, opponent *int) {
+	if playerID == gpa.gameplay.player1ID {
+		return &gpa.gameplay.game.Player1Health, &gpa.gameplay.game.Player2Health
+	}
+	return &gpa.gameplay.game.Player2Health, &gpa.gameplay.game.Player1Health
 }
 
 // GameStateAdapter adapts GameState to handlers.GameState interface
