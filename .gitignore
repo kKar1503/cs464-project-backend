@@ -6,6 +6,17 @@ bin/
 *.so
 *.dylib
 
+# Go service binaries (built by go build without -o)
+auth
+deck
+matchmaking
+services/deck/deck
+services/gameplay/gameplay
+services/matchmaking/matchmaking
+services/auth/auth
+services/friendlist/friendlist
+services/replay/replay
+
 # Test binary, built with `go test -c`
 *.test
 
