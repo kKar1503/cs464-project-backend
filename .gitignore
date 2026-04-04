@@ -7,9 +7,9 @@ bin/
 *.dylib
 
 # Go service binaries (built by go build without -o)
-auth
-deck
-matchmaking
+/auth
+/deck
+/matchmaking
 services/deck/deck
 services/gameplay/gameplay
 services/matchmaking/matchmaking
