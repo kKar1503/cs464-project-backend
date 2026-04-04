@@ -10,35 +10,65 @@ import (
 )
 
 type Querier interface {
+	BanUser(ctx context.Context, arg BanUserParams) error
 	CancelGameSession(ctx context.Context, sessionID string) error
 	CompleteGameSession(ctx context.Context, arg CompleteGameSessionParams) error
 	CountUsers(ctx context.Context) (int64, error)
+	CreateDeck(ctx context.Context, arg CreateDeckParams) (sql.Result, error)
 	CreateGameSession(ctx context.Context, arg CreateGameSessionParams) error
+	CreatePack(ctx context.Context, arg CreatePackParams) (sql.Result, error)
+	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (sql.Result, error)
+	CreateUserAuth(ctx context.Context, arg CreateUserAuthParams) (sql.Result, error)
+	DeleteDeck(ctx context.Context, arg DeleteDeckParams) (sql.Result, error)
+	DeleteDeckCards(ctx context.Context, deckID int32) error
 	DeleteFromQueue(ctx context.Context, userID int64) (sql.Result, error)
 	DeleteFromQueueByUsers(ctx context.Context, arg DeleteFromQueueByUsersParams) error
 	DeleteUser(ctx context.Context, id int64) error
 	GetActiveQueue(ctx context.Context) ([]GetActiveQueueRow, error)
+	GetActiveTokensByUser(ctx context.Context, userID int64) ([]string, error)
+	GetAllCards(ctx context.Context) ([]Card, error)
+	GetAllCardsByAffiliation(ctx context.Context, affiliation int32) ([]Card, error)
+	GetAllCardsByRarity(ctx context.Context, rarity string) ([]Card, error)
+	GetAllCardsByRarityAndAffiliation(ctx context.Context, arg GetAllCardsByRarityAndAffiliationParams) ([]Card, error)
+	GetDeckByIDAndPlayer(ctx context.Context, arg GetDeckByIDAndPlayerParams) (GetDeckByIDAndPlayerRow, error)
+	GetDeckCards(ctx context.Context, deckID int32) ([]GetDeckCardsRow, error)
 	GetExpiredWaitingSessions(ctx context.Context) ([]GetExpiredWaitingSessionsRow, error)
+	GetGameSessionPlayers(ctx context.Context, sessionID string) (GetGameSessionPlayersRow, error)
 	GetOngoingGameSession(ctx context.Context, arg GetOngoingGameSessionParams) (string, error)
+	GetPackByIDAndPlayer(ctx context.Context, arg GetPackByIDAndPlayerParams) (GetPackByIDAndPlayerRow, error)
+	GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlayerCardsRow, error)
+	GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCardsNotInDeckParams) ([]GetPlayerCardsNotInDeckRow, error)
+	GetPlayerDeckList(ctx context.Context, playerID int64) ([]GetPlayerDeckListRow, error)
+	GetPlayerPacks(ctx context.Context, playerID int64) ([]GetPlayerPacksRow, error)
 	GetQueueEntryByUserID(ctx context.Context, userID int64) (int64, error)
 	GetQueueStatus(ctx context.Context, userID int64) (GetQueueStatusRow, error)
+	GetRandomCardsByRarity(ctx context.Context, arg GetRandomCardsByRarityParams) ([]GetRandomCardsByRarityRow, error)
 	GetSessionForAccept(ctx context.Context, sessionID string) (GetSessionForAcceptRow, error)
 	GetSessionForEndGame(ctx context.Context, sessionID string) (GetSessionForEndGameRow, error)
 	GetSessionStatus(ctx context.Context, sessionID string) (GetSessionStatusRow, error)
 	GetSessionWithPlayers(ctx context.Context, sessionID string) (GetSessionWithPlayersRow, error)
 	GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error)
 	GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error)
+	GetUserByUsernameAuth(ctx context.Context, username string) (GetUserByUsernameAuthRow, error)
 	GetUserForMatchmaking(ctx context.Context, id int64) (GetUserForMatchmakingRow, error)
+	InsertDeckCard(ctx context.Context, arg InsertDeckCardParams) error
 	InsertIntoQueue(ctx context.Context, arg InsertIntoQueueParams) error
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
+	OpenPack(ctx context.Context, packID int32) error
 	RequeuePlayer(ctx context.Context, arg RequeuePlayerParams) error
+	RevokeAllUserSessions(ctx context.Context, userID int64) error
+	RevokeSessionByToken(ctx context.Context, token string) error
 	SetPlayer1Ready(ctx context.Context, sessionID string) (sql.Result, error)
 	SetPlayer2Ready(ctx context.Context, sessionID string) (sql.Result, error)
 	StartGameSession(ctx context.Context, arg StartGameSessionParams) (sql.Result, error)
+	UnbanUser(ctx context.Context, id int64) error
+	UpdateDeck(ctx context.Context, arg UpdateDeckParams) (sql.Result, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) error
 	UpdateUserMMR(ctx context.Context, arg UpdateUserMMRParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpsertPlayerCard(ctx context.Context, arg UpsertPlayerCardParams) error
+	ValidateSession(ctx context.Context, token string) (ValidateSessionRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

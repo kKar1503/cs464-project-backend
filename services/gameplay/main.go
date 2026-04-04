@@ -14,11 +14,13 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/websocket"
+	db "github.com/kKar1503/cs464-backend/db/sqlc"
 	"github.com/redis/go-redis/v9"
 )
 
 var (
-	db              *sql.DB
+	sqlDB           *sql.DB
+	queries         *db.Queries
 	redisClient     *redis.Client
 	stateManager    *GameStateManager
 	upgrader        = websocket.Upgrader{
@@ -44,16 +46,17 @@ func main() {
 		os.Getenv("DB_NAME"),
 	)
 
-	db, err = sql.Open("mysql", dsn)
+	sqlDB, err = sql.Open("mysql", dsn)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
+	defer sqlDB.Close()
 
 	// Test database connection
-	if err := db.Ping(); err != nil {
+	if err := sqlDB.Ping(); err != nil {
 		log.Fatalf("Failed to ping database: %v", err)
 	}
+	queries = db.New(sqlDB)
 	log.Println("Connected to MySQL database")
 
 	// Initialize Redis client
@@ -150,21 +153,16 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	fmt.Sscanf(userIDStr, "%d", &userID)
 
 	// Fetch session info from database
-	var player1ID, player2ID int64
-	var player1Name, player2Name string
-	err := db.QueryRow(`
-		SELECT gs.player1_id, gs.player2_id, u1.username, u2.username
-		FROM game_sessions gs
-		JOIN users u1 ON gs.player1_id = u1.id
-		JOIN users u2 ON gs.player2_id = u2.id
-		WHERE gs.session_id = ? AND gs.status = 'in_progress'
-	`, sessionID).Scan(&player1ID, &player2ID, &player1Name, &player2Name)
-
+	sessionInfo, err := queries.GetGameSessionPlayers(r.Context(), sessionID)
 	if err != nil {
 		log.Printf("Failed to fetch session %s: %v", sessionID, err)
 		http.Error(w, "Session not found or not active", http.StatusNotFound)
 		return
 	}
+	player1ID := sessionInfo.Player1ID
+	player2ID := sessionInfo.Player2ID
+	player1Name := sessionInfo.Username
+	player2Name := sessionInfo.Username_2
 
 	// Determine which player this is
 	var playerID PlayerID
