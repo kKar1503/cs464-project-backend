@@ -12,9 +12,13 @@ import (
     "time"
 
     _ "github.com/go-sql-driver/mysql"
+    db "github.com/kKar1503/cs464-backend/db/sqlc"
 )
 
-var db *sql.DB
+var (
+    sqlDB   *sql.DB
+    queries *db.Queries
+)
 
 func main() {
     log.Println("Deck service starting...")
@@ -28,15 +32,16 @@ func main() {
     )
 
     var err error
-    db, err = sql.Open("mysql", dsn)
+    sqlDB, err = sql.Open("mysql", dsn)
     if err != nil {
         log.Fatalf("Failed to connect to database: %v", err)
     }
-    defer db.Close()
+    defer sqlDB.Close()
 
-    if err := db.Ping(); err != nil {
+    if err := sqlDB.Ping(); err != nil {
         log.Fatalf("Failed to ping database: %v", err)
     }
+    queries = db.New(sqlDB)
     log.Println("Connected to MySQL database")
 
     mux := http.NewServeMux()

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	db "github.com/kKar1503/cs464-backend/db/sqlc"
 )
 
 // req/res types for deck apis
@@ -67,17 +69,20 @@ func handleCreateDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+
 	// decks table requires 1 card_id
 	firstCardID := req.CardIDs[0]
-	result, err := db.Exec(
-		"INSERT INTO decks (player_id, card_id, name) VALUES (?, ?, ?)", 
-		userID, firstCardID, req.Name,
-	)
+	result, err := queries.CreateDeck(ctx, db.CreateDeckParams{
+		PlayerID: userID,
+		CardID:   int32(firstCardID),
+		Name:     req.Name,
+	})
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create deck"})
 		return
 	}
-	
+
 	deckID, err := result.LastInsertId()
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get deck id"})
@@ -85,10 +90,11 @@ func handleCreateDeck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i, cardID := range req.CardIDs {
-		_, err := db.Exec(
-			"INSERT INTO deck_cards (deck_id, card_id, position) VALUES (?, ?, ?)", 
-			deckID, cardID, i,
-		)
+		err := queries.InsertDeckCard(ctx, db.InsertDeckCardParams{
+			DeckID:   int32(deckID),
+			CardID:   int32(cardID),
+			Position: int32(i),
+		})
 		if err != nil {
 			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 			return
@@ -132,52 +138,40 @@ func handleGetDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var name string 
-	var createdAt []uint8
-	err = db.QueryRow(
-		"SELECT name, created_at FROM decks WHERE deck_id = ? AND player_id = ?", 
-		deckID, userID,
-	).Scan(&name, &createdAt)
+	ctx := r.Context()
 
+	deck, err := queries.GetDeckByIDAndPlayer(ctx, db.GetDeckByIDAndPlayerParams{
+		DeckID:   int32(deckID),
+		PlayerID: userID,
+	})
 	if err == sql.ErrNoRows {
 		respondJSON(w, http.StatusNotFound, map[string]string{"error": "deck not found"})
 		return
 	}
-
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
 
-	rows, err := db.Query(
-		"SELECT card_id, position FROM deck_cards WHERE deck_id = ? ORDER BY position",
-		deckID,
-	)
-
+	deckCards, err := queries.GetDeckCards(ctx, int32(deckID))
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-
-	defer rows.Close()
 
 	var cards []DeckCard
 	var cardIDs []int64
-	for rows.Next() {
-		var c DeckCard
-		if err := rows.Scan(&c.CardID, &c.Position); err != nil {
-			continue
-		}
-		cards = append(cards, c)
-		cardIDs = append(cardIDs, c.CardID)
+	for _, c := range deckCards {
+		cards = append(cards, DeckCard{CardID: int64(c.CardID), Position: int(c.Position)})
+		cardIDs = append(cardIDs, int64(c.CardID))
 	}
 
 	respondJSON(w, http.StatusOK, DeckResponse{
 		DeckID:    deckID,
-		Name:      name,
+		Name:      deck.Name,
 		CardIDs:   cardIDs,
 		Cards:     cards,
-		CreatedAt: string(createdAt),
+		CreatedAt: deck.CreatedAt.Format(time.RFC3339),
 	})
 }
 
@@ -211,10 +205,14 @@ func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.Exec(
-		"UPDATE decks SET name = ?, card_id = ? WHERE deck_id = ? AND player_id = ?",
-		req.Name, req.CardIDs[0], req.DeckID, userID,
-	)
+	ctx := r.Context()
+
+	result, err := queries.UpdateDeck(ctx, db.UpdateDeckParams{
+		Name:     req.Name,
+		CardID:   int32(req.CardIDs[0]),
+		DeckID:   int32(req.DeckID),
+		PlayerID: userID,
+	})
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update deck"})
 		return
@@ -225,14 +223,13 @@ func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(req.CardIDs) > 0 {
-		_, _ = db.Exec("DELETE FROM deck_cards WHERE deck_id = ?", req.DeckID)
-		for i, cardID := range req.CardIDs {
-			_, _ = db.Exec(
-				"INSERT INTO deck_cards (deck_id, card_id, position) VALUES (?, ?, ?)",
-				req.DeckID, cardID, i,
-			)
-		}
+	queries.DeleteDeckCards(ctx, int32(req.DeckID))
+	for i, cardID := range req.CardIDs {
+		queries.InsertDeckCard(ctx, db.InsertDeckCardParams{
+			DeckID:   int32(req.DeckID),
+			CardID:   int32(cardID),
+			Position: int32(i),
+		})
 	}
 
 	respondJSON(w, http.StatusOK, DeckResponse{
@@ -271,10 +268,10 @@ func handleDeleteDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.Exec(
-		"DELETE FROM decks WHERE deck_id = ? AND player_id = ?", 
-		deckID, userID,
-	)
+	result, err := queries.DeleteDeck(r.Context(), db.DeleteDeckParams{
+		DeckID:   int32(deckID),
+		PlayerID: userID,
+	})
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete deck"})
 		return
@@ -312,38 +309,48 @@ func handleGetAllCards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url FROM cards WHERE 1=1"
-	args := []interface{}{}
+	ctx := r.Context()
+	rarity := r.URL.Query().Get("rarity")
+	affiliation := r.URL.Query().Get("affiliation")
 
-	if rarity := r.URL.Query().Get("rarity"); rarity != "" {
-		query += " AND rarity = ?"
-		args = append(args, rarity)
+	var dbCards []db.Card
+	var err error
+
+	switch {
+	case rarity != "" && affiliation != "":
+		var aff int64
+		fmt.Sscanf(affiliation, "%d", &aff)
+		dbCards, err = queries.GetAllCardsByRarityAndAffiliation(ctx, db.GetAllCardsByRarityAndAffiliationParams{
+			Rarity:      rarity,
+			Affiliation: int32(aff),
+		})
+	case rarity != "":
+		dbCards, err = queries.GetAllCardsByRarity(ctx, rarity)
+	case affiliation != "":
+		var aff int64
+		fmt.Sscanf(affiliation, "%d", &aff)
+		dbCards, err = queries.GetAllCardsByAffiliation(ctx, int32(aff))
+	default:
+		dbCards, err = queries.GetAllCards(ctx)
 	}
-	if affiliation := r.URL.Query().Get("affiliation"); affiliation != "" {
-		query += " AND affiliation = ?"
-		args = append(args, affiliation)
-	}
 
-	query += " ORDER BY card_id ASC"
-
-	rows, err := db.Query(query, args...)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get cards"})
 		return
 	}
-	defer rows.Close()
 
-	var cards []CardResponse
-	for rows.Next() {
-		var c CardResponse
-		if err := rows.Scan(&c.CardID, &c.CardName, &c.Affiliation, &c.Rarity, &c.ManaCost, &c.MaxLevel, &c.Description, &c.IconURL); err != nil {
-			continue
-		}
-		cards = append(cards, c)
-	}
-
-	if cards == nil {
-		cards = []CardResponse{}
+	cards := make([]CardResponse, 0, len(dbCards))
+	for _, c := range dbCards {
+		cards = append(cards, CardResponse{
+			CardID:      int(c.CardID),
+			CardName:    c.CardName,
+			Affiliation: int(c.Affiliation),
+			Rarity:      c.Rarity,
+			ManaCost:    int(c.ManaCost),
+			MaxLevel:    int(c.MaxLevel),
+			Description: c.Description,
+			IconURL:     c.IconUrl,
+		})
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{"cards": cards, "count": len(cards)})
@@ -378,34 +385,27 @@ func handleGetPlayerCards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query(`
-		SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
-		       c.description, c.icon_url, pc.level, pc.quantity, pc.is_in_deck
-		FROM player_cards pc
-		JOIN cards c ON pc.card_id = c.card_id
-		WHERE pc.player_id = ?
-		ORDER BY c.rarity DESC, c.card_id ASC
-	`, userID)
+	dbCards, err := queries.GetPlayerCards(r.Context(), userID)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get player cards"})
 		return
 	}
-	defer rows.Close()
 
-	var cards []PlayerCardResponse
-	for rows.Next() {
-		var c PlayerCardResponse
-		if err := rows.Scan(
-			&c.CardID, &c.CardName, &c.Affiliation, &c.Rarity, &c.ManaCost, &c.MaxLevel,
-			&c.Description, &c.IconURL, &c.Level, &c.Quantity, &c.IsInDeck,
-		); err != nil {
-			continue
-		}
-		cards = append(cards, c)
-	}
-
-	if cards == nil {
-		cards = []PlayerCardResponse{}
+	cards := make([]PlayerCardResponse, 0, len(dbCards))
+	for _, c := range dbCards {
+		cards = append(cards, PlayerCardResponse{
+			CardID:      int(c.CardID),
+			CardName:    c.CardName,
+			Affiliation: int(c.Affiliation),
+			Rarity:      c.Rarity,
+			ManaCost:    int(c.ManaCost),
+			MaxLevel:    int(c.MaxLevel),
+			Description: c.Description,
+			IconURL:     c.IconUrl,
+			Level:       int(c.Level),
+			Quantity:    int(c.Quantity),
+			IsInDeck:    c.IsInDeck,
+		})
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{"cards": cards, "count": len(cards)})
@@ -432,68 +432,46 @@ func handleGetCardsNotInDecks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+
 	// Fetch all decks belonging to the user
-	deckRows, err := db.Query(
-		"SELECT deck_id, name FROM decks WHERE player_id = ? ORDER BY deck_id ASC",
-		userID,
-	)
+	decks, err := queries.GetPlayerDeckList(ctx, userID)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get decks"})
 		return
 	}
-	defer deckRows.Close()
-
-	type deckInfo struct {
-		id   int64
-		name string
-	}
-	var decks []deckInfo
-	for deckRows.Next() {
-		var d deckInfo
-		if err := deckRows.Scan(&d.id, &d.name); err != nil {
-			continue
-		}
-		decks = append(decks, d)
-	}
 
 	result := make([]DeckCardsNotInDeck, 0, len(decks))
 	for _, d := range decks {
-		cardRows, err := db.Query(`
-			SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
-			       c.description, c.icon_url, pc.level, pc.quantity, pc.is_in_deck
-			FROM player_cards pc
-			JOIN cards c ON pc.card_id = c.card_id
-			WHERE pc.player_id = ?
-			  AND pc.card_id NOT IN (
-			      SELECT dc.card_id FROM deck_cards dc WHERE dc.deck_id = ?
-			  )
-			ORDER BY c.rarity DESC, c.card_id ASC
-		`, userID, d.id)
+		dbCards, err := queries.GetPlayerCardsNotInDeck(ctx, db.GetPlayerCardsNotInDeckParams{
+			PlayerID: userID,
+			DeckID:   d.DeckID,
+		})
 		if err != nil {
 			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get cards for deck"})
 			return
 		}
 
-		var cards []PlayerCardResponse
-		for cardRows.Next() {
-			var c PlayerCardResponse
-			if err := cardRows.Scan(
-				&c.CardID, &c.CardName, &c.Affiliation, &c.Rarity, &c.ManaCost, &c.MaxLevel,
-				&c.Description, &c.IconURL, &c.Level, &c.Quantity, &c.IsInDeck,
-			); err != nil {
-				continue
-			}
-			cards = append(cards, c)
-		}
-		cardRows.Close()
-
-		if cards == nil {
-			cards = []PlayerCardResponse{}
+		cards := make([]PlayerCardResponse, 0, len(dbCards))
+		for _, c := range dbCards {
+			cards = append(cards, PlayerCardResponse{
+				CardID:      int(c.CardID),
+				CardName:    c.CardName,
+				Affiliation: int(c.Affiliation),
+				Rarity:      c.Rarity,
+				ManaCost:    int(c.ManaCost),
+				MaxLevel:    int(c.MaxLevel),
+				Description: c.Description,
+				IconURL:     c.IconUrl,
+				Level:       int(c.Level),
+				Quantity:    int(c.Quantity),
+				IsInDeck:    c.IsInDeck,
+			})
 		}
 
 		result = append(result, DeckCardsNotInDeck{
-			DeckID:   d.id,
-			DeckName: d.name,
+			DeckID:   int64(d.DeckID),
+			DeckName: d.Name,
 			Cards:    cards,
 		})
 	}

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
 	"net/http"
+
+	db "github.com/kKar1503/cs464-backend/db/sqlc"
 )
 
 type PackResponse struct {
@@ -41,29 +44,20 @@ func handleGetPacks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query(
-		"SELECT pack_id, pack_type, is_opened, created_at FROM card_packs WHERE player_id = ? ORDER BY created_at DESC",
-		userID,
-	)
+	dbPacks, err := queries.GetPlayerPacks(r.Context(), userID)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get packs"})
 		return
 	}
-	defer rows.Close()
 
-	var packs []PackResponse
-	for rows.Next() {
-		var p PackResponse
-		var createdAt []uint8
-		if err := rows.Scan(&p.PackID, &p.PackType, &p.IsOpened, &createdAt); err != nil {
-			continue
-		}
-		p.CreatedAt = string(createdAt)
-		packs = append(packs, p)
-	}
-
-	if packs == nil {
-		packs = []PackResponse{}
+	packs := make([]PackResponse, 0, len(dbPacks))
+	for _, p := range dbPacks {
+		packs = append(packs, PackResponse{
+			PackID:    int64(p.PackID),
+			PackType:  p.PackType,
+			IsOpened:  p.IsOpened,
+			CreatedAt: p.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{"packs": packs})
@@ -95,13 +89,12 @@ func handleOpenPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var packType string
-	var isOpened bool
-	err = db.QueryRow(
-		"SELECT pack_type, is_opened FROM card_packs WHERE pack_id = ? AND player_id = ?",
-		packID, userID,
-	).Scan(&packType, &isOpened)
+	ctx := r.Context()
 
+	pack, err := queries.GetPackByIDAndPlayer(ctx, db.GetPackByIDAndPlayerParams{
+		PackID:   int32(packID),
+		PlayerID: userID,
+	})
 	if err == sql.ErrNoRows {
 		respondJSON(w, http.StatusNotFound, map[string]string{"error": "pack not found"})
 		return
@@ -110,40 +103,32 @@ func handleOpenPack(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	if isOpened {
+	if pack.IsOpened {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "pack already opened"})
 		return
 	}
 
-	cards, err := generatePackCards(packType)
+	cards, err := generatePackCards(ctx, pack.PackType)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate cards"})
 		return
 	}
 
-	_, err = db.Exec(
-		"UPDATE card_packs SET is_opened = TRUE, opened_at = NOW() WHERE pack_id = ?",
-		packID,
-	)
-	if err != nil {
+	if err := queries.OpenPack(ctx, int32(packID)); err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to open pack"})
 		return
 	}
 
 	for _, c := range cards {
-		_, err = db.Exec(
-			"INSERT INTO player_cards (player_id, card_id, level, quantity) VALUES (?, ?, 1, 1) "+
-				"ON DUPLICATE KEY UPDATE quantity = quantity + 1",
-			userID, c.CardID,
-		)
-		if err != nil {
-			continue
-		}
+		queries.UpsertPlayerCard(ctx, db.UpsertPlayerCardParams{
+			PlayerID: userID,
+			CardID:   int32(c.CardID),
+		})
 	}
 
 	respondJSON(w, http.StatusOK, OpenPackResponse{
 		PackID:   packID,
-		PackType: packType,
+		PackType: pack.PackType,
 		Cards:    cards,
 	})
 }
@@ -163,7 +148,7 @@ func rollPackType() string {
 	}
 }
 
-func generatePackCards(packType string) ([]PackCard, error) {
+func generatePackCards(ctx context.Context, packType string) ([]PackCard, error) {
 	type rarityRange struct {
 		rarity string
 		min    int
@@ -218,38 +203,28 @@ func generatePackCards(packType string) ([]PackCard, error) {
 			continue
 		}
 
-		rows, err := db.Query(
-			"SELECT card_id, card_name, rarity FROM cards WHERE rarity = ? ORDER BY RAND() LIMIT ?",
-			d.rarity, count,
-		)
+		dbCards, err := queries.GetRandomCardsByRarity(ctx, db.GetRandomCardsByRarityParams{
+			Rarity: d.rarity,
+			Limit:  int32(count),
+		})
 		if err != nil {
 			return nil, err
 		}
-		for rows.Next() {
-			var c PackCard
-			if err := rows.Scan(&c.CardID, &c.CardName, &c.Rarity); err != nil {
-				continue
-			}
-			result = append(result, c)
+		for _, c := range dbCards {
+			result = append(result, PackCard{CardID: int64(c.CardID), CardName: c.CardName, Rarity: c.Rarity})
 		}
-		rows.Close()
 	}
 
 	if len(result) < totalCards {
 		remaining := totalCards - len(result)
-		rows, err := db.Query(
-			"SELECT card_id, card_name, rarity FROM cards WHERE rarity = 'common' ORDER BY RAND() LIMIT ?",
-			remaining,
-		)
+		dbCards, err := queries.GetRandomCardsByRarity(ctx, db.GetRandomCardsByRarityParams{
+			Rarity: "common",
+			Limit:  int32(remaining),
+		})
 		if err == nil {
-			for rows.Next() {
-				var c PackCard
-				if err := rows.Scan(&c.CardID, &c.CardName, &c.Rarity); err != nil {
-					continue
-				}
-				result = append(result, c)
+			for _, c := range dbCards {
+				result = append(result, PackCard{CardID: int64(c.CardID), CardName: c.CardName, Rarity: c.Rarity})
 			}
-			rows.Close()
 		}
 	}
 
@@ -261,12 +236,12 @@ func generatePackCards(packType string) ([]PackCard, error) {
 }
 
 // GivePackToPlayer creates a new pack for a player (call after a battle ends).
-func GivePackToPlayer(playerID int64) (int64, string, error) {
+func GivePackToPlayer(ctx context.Context, playerID int64) (int64, string, error) {
 	packType := rollPackType()
-	result, err := db.Exec(
-		"INSERT INTO card_packs (player_id, pack_type) VALUES (?, ?)",
-		playerID, packType,
-	)
+	result, err := queries.CreatePack(ctx, db.CreatePackParams{
+		PlayerID: playerID,
+		PackType: packType,
+	})
 	if err != nil {
 		return 0, "", err
 	}
@@ -289,7 +264,7 @@ func handleBuyPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	packID, packType, err := GivePackToPlayer(userID)
+	packID, packType, err := GivePackToPlayer(r.Context(), userID)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create pack"})
 		return
