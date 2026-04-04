@@ -1,0 +1,40 @@
+id	Image	Name	Colour	Rarity	Cost	Attack	Health	Effect	Summon	OnAttack	OnDamaged	OnDeath	Card Mechanics
+1		Pig	Grey	common	1	5	5	"summon: 1/2048 chance to transform into 999/5 technoblade"	technoblade				summon = Enter battlefield
+2		Farmer	Grey	common	2	10	10	No effect	basic				
+3		Mercenary	Grey	rare	3	15	15	No effect	basic				
+4		Town Guard	Grey	rare	4	20	20	No effect	basic				
+5		Town Hero	Grey	epic	5	25	25	"summon: destroy all with same colour and get +5/+5 for each card destroyed"	destroy_same_colour				
+6		Travelling Merchant	Grey	legendary	6	10	10	"summon: +5/+5 for each colour in your deck" 	self_stats_change				
+7		Barbarian	Red	common	3	20	10	"summon: 1/2048 chance to double attack speed"	double_attack_speed				
+8		Dwarf	Red	common	3	5	5	"summon: give vertically adjacent unit "+10/0"	vertical_stats_change				
+9		Bombadier	Red	rare	4	25	15	"summon: deal 15 to enemy leader"	deal_damage				
+10		Ninja	Red	rare	3	20	10	"summon: doubles its own attack speed"	double_attack_speed				
+11		Apache	Red	epic	5	25	25	"on damaged: gain +10/0"	basic		buff_attack		
+12		Dinosaur	Red	legendary	8	50	30	"summon: deal 15 to all units on battlefield"	deal_damage				
+13		Penguin	Blue	common	3	5	5	"summon: give enemy units in the same column -10/0"	opponent_stats_change				
+14		Apprentice Magician	Blue	common	3	20	15	"Attacks a random enemy unit or leader"	basic	random_enemy			
+15		Krazy Kraken	Blue	rare	4	30	20	"Attacks a random unit or leader"	basic	random_all			
+16		Pufferfish	Blue	rare	4	15	15	"summon: return an enemy unit in front to opponent's hand"	bounce				
+17		Magic Swordman	Blue	epic	5	15	15	"summon: Transform an enemy unit in front into a pig"	into_pig				
+18		Big Whale	Blue	legendary	7	30	40	"Whenever a unit attacks this unit, deal damage equal to its attack"	basic		reflect		
+19		Swamp Ogre	Green	common	4	20	20	"summon: 1/2048 chance to bounce all enemy units in the front row"	bounce				
+20		Nymph	Green	common	3	5	5	"summon: give adjacent units +10/+10"	adjacent_stats_change				
+21		Living Tree	Green	rare	3	10	10	"summon: increase your maximum elixir by 1"	elixer_overflow				
+22		Dryad	Green	rare	4	15	15	"summon: if there is an enemy unit in front, gain +10/+10"	self_stats_change				
+23		Alpha Wolf	Green	epic	5	15	15	"summon: summon 2 15/15 wolves on your board"	summon_wolves				
+24		Quetzalcoatl	Green	legendary	7	15	15	"summon: give all friendly units +10/+10"	buff_all_allies				
+25		Glass Bones	Purple	common	2	10	20	"on attack: deal 10 damage to itself"		suicide			
+26		Traitor	Purple	common	2	20	20	"on death: deal 20 damage to your leader"				damage_hero	
+27		Plague Doctor	Purple	rare	5	5	10	"summon: give enemy units in the back row -15/-10"	opponent_stats_change				
+28		Witch	Purple	rare	3	15	15	"on death: destroy a random enemy unit"				dest_rand	
+29		Dullahan	Purple	epic	6	20	20	"summon: destroy an enemy in front of it"	destroy_enemy_infront				
+30		Shikigami	Purple	legendary	3	15	100	"summon: set all units hp to 1"	set_all_hp_1				
+31		Lazy Chick	Yellow	common	2	0	30	"summon: 1/2048 chance to set its attack speed to 0" Ignore the effect for now					
+32		Angel	Yellow	common	3	5	5	"summon: give vertically adjacent unit 0/+10"	vertical_stats_change				
+33		Holy Spear Knight	Yellow	rare	4	15	15	"Ignore the front row of enemy units when attacking"		back_row			
+34		Cat Sith	Yellow	rare	3	5	15	"summon & on attack: reset the attack gauge for the enemy in front"	reset_attack	reset_attack			
+35		Paladin	Yellow	epic	5	15	25	"whenever this unit takes damage, reduce it by 10"			shield		
+36		Archangel	Yellow	legendary	6	15	25	"on attack: give adjacent units +0/+10"		heal_adj			
+37		Technoblade	Colourless	token	1	999	5	No effect	basic				
+38		Wolf	Green	token	3	15	15	No effect	basic				
+								priority -> Summon - attack -> on death,->die  -> attack effect					

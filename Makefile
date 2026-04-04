@@ -1,4 +1,4 @@
-.PHONY: help build build-auth build-matchmaking build-gameplay build-friendlist build-replay build-cursor-udp clean test run-auth run-matchmaking run-gameplay run-friendlist run-replay run-cursor-udp run-all docker-build docker-up docker-down sqlc-generate migrate-up migrate-down migrate-create migrate-force
+.PHONY: help build build-auth build-matchmaking build-gameplay build-friendlist build-replay build-cursor-udp clean test run-auth run-matchmaking run-gameplay run-friendlist run-replay run-cursor-udp run-all docker-build docker-up docker-down sqlc-generate migrate-up migrate-down migrate-create migrate-force migrate-drop migrate-reset
 
 # Database configuration
 DB_URL := "mysql://$(shell grep MYSQL_USER .env | cut -d'=' -f2):$(shell grep MYSQL_PASSWORD .env | cut -d'=' -f2)@tcp(localhost:$(shell grep MYSQL_PORT .env | cut -d'=' -f2))/$(shell grep MYSQL_DATABASE .env | cut -d'=' -f2)"
@@ -35,6 +35,8 @@ help:
 	@echo "  migrate-down       - Rollback last migration"
 	@echo "  migrate-create     - Create a new migration (NAME=migration_name)"
 	@echo "  migrate-force      - Force set migration version (VERSION=N)"
+	@echo "  migrate-drop       - Drop everything in the database (full nuke)"
+	@echo "  migrate-reset      - Drop everything and re-run all migrations"
 
 # Build targets
 build: build-auth build-matchmaking build-gameplay build-friendlist build-replay build-cursor-udp
@@ -246,3 +248,16 @@ migrate-force:
 		echo "Install with: brew install golang-migrate"; \
 		exit 1; \
 	fi
+
+migrate-drop:
+	@echo "Dropping all tables and data..."
+	@if command -v migrate >/dev/null 2>&1; then \
+		migrate -path db/migrations -database $(DB_URL) drop -f; \
+	else \
+		echo "golang-migrate not found."; \
+		echo "Install with: brew install golang-migrate"; \
+		exit 1; \
+	fi
+
+migrate-reset: migrate-drop migrate-up
+	@echo "Database reset complete!"
