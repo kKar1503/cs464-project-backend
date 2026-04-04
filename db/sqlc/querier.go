@@ -10,13 +10,34 @@ import (
 )
 
 type Querier interface {
+	CancelGameSession(ctx context.Context, sessionID string) error
+	CompleteGameSession(ctx context.Context, arg CompleteGameSessionParams) error
 	CountUsers(ctx context.Context) (int64, error)
+	CreateGameSession(ctx context.Context, arg CreateGameSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (sql.Result, error)
+	DeleteFromQueue(ctx context.Context, userID int64) (sql.Result, error)
+	DeleteFromQueueByUsers(ctx context.Context, arg DeleteFromQueueByUsersParams) error
 	DeleteUser(ctx context.Context, id int64) error
-	GetUserByID(ctx context.Context, id int64) (User, error)
-	GetUserByUsername(ctx context.Context, username string) (User, error)
-	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	GetActiveQueue(ctx context.Context) ([]GetActiveQueueRow, error)
+	GetExpiredWaitingSessions(ctx context.Context) ([]GetExpiredWaitingSessionsRow, error)
+	GetOngoingGameSession(ctx context.Context, arg GetOngoingGameSessionParams) (string, error)
+	GetQueueEntryByUserID(ctx context.Context, userID int64) (int64, error)
+	GetQueueStatus(ctx context.Context, userID int64) (GetQueueStatusRow, error)
+	GetSessionForAccept(ctx context.Context, sessionID string) (GetSessionForAcceptRow, error)
+	GetSessionForEndGame(ctx context.Context, sessionID string) (GetSessionForEndGameRow, error)
+	GetSessionStatus(ctx context.Context, sessionID string) (GetSessionStatusRow, error)
+	GetSessionWithPlayers(ctx context.Context, sessionID string) (GetSessionWithPlayersRow, error)
+	GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error)
+	GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error)
+	GetUserForMatchmaking(ctx context.Context, id int64) (GetUserForMatchmakingRow, error)
+	InsertIntoQueue(ctx context.Context, arg InsertIntoQueueParams) error
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
+	RequeuePlayer(ctx context.Context, arg RequeuePlayerParams) error
+	SetPlayer1Ready(ctx context.Context, sessionID string) (sql.Result, error)
+	SetPlayer2Ready(ctx context.Context, sessionID string) (sql.Result, error)
+	StartGameSession(ctx context.Context, arg StartGameSessionParams) (sql.Result, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) error
+	UpdateUserMMR(ctx context.Context, arg UpdateUserMMRParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }
 

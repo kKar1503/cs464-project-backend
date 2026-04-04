@@ -14,11 +14,13 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	db "github.com/kKar1503/cs464-backend/db/sqlc"
 	"github.com/redis/go-redis/v9"
 )
 
 var (
-	db          *sql.DB
+	sqlDB       *sql.DB
+	queries     *db.Queries
 	redisClient *redis.Client
 )
 
@@ -35,16 +37,17 @@ func main() {
 		os.Getenv("DB_NAME"),
 	)
 
-	db, err = sql.Open("mysql", dsn)
+	sqlDB, err = sql.Open("mysql", dsn)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
+	defer sqlDB.Close()
 
 	// Test database connection
-	if err := db.Ping(); err != nil {
+	if err := sqlDB.Ping(); err != nil {
 		log.Fatalf("Failed to ping database: %v", err)
 	}
+	queries = db.New(sqlDB)
 	log.Println("Connected to MySQL database")
 
 	// Initialize Redis client
@@ -151,86 +154,53 @@ func expiredMatchesLoop() {
 
 // handleExpiredMatches finds expired waiting sessions and requeues both players
 func handleExpiredMatches() error {
-	rows, err := db.Query(`
-		SELECT gs.session_id, gs.player1_id, gs.player2_id,
-		       u1.username, u2.username, u1.mmr, u2.mmr
-		FROM game_sessions gs
-		JOIN users u1 ON gs.player1_id = u1.id
-		JOIN users u2 ON gs.player2_id = u2.id
-		WHERE gs.status = 'waiting'
-		  AND gs.match_expires_at IS NOT NULL
-		  AND gs.match_expires_at < NOW()
-	`)
+	ctx := context.Background()
+
+	expired, err := queries.GetExpiredWaitingSessions(ctx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
-	ctx := context.Background()
-	expiredCount := 0
-
-	for rows.Next() {
-		var sessionID, player1Username, player2Username string
-		var player1ID, player2ID int64
-		var player1MMR, player2MMR int
-
-		if err := rows.Scan(&sessionID, &player1ID, &player2ID, &player1Username, &player2Username, &player1MMR, &player2MMR); err != nil {
-			log.Printf("Error scanning expired session: %v", err)
-			continue
-		}
-
+	for _, s := range expired {
 		// Cancel the session
-		_, err = db.Exec(
-			"UPDATE game_sessions SET status = 'cancelled' WHERE session_id = ?",
-			sessionID,
-		)
-		if err != nil {
-			log.Printf("Failed to cancel expired session %s: %v", sessionID, err)
+		if err := queries.CancelGameSession(ctx, s.SessionID); err != nil {
+			log.Printf("Failed to cancel expired session %s: %v", s.SessionID, err)
 			continue
 		}
 
 		// Requeue player 1
-		_, err = db.Exec(
-			"INSERT INTO matchmaking_queue (user_id, mmr, joined_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE joined_at = NOW()",
-			player1ID, player1MMR,
-		)
-		if err == nil {
-			queueKey := fmt.Sprintf("queue:%d", player1ID)
+		if err := queries.RequeuePlayer(ctx, db.RequeuePlayerParams{UserID: s.Player1ID, Mmr: s.Mmr}); err == nil {
+			queueKey := fmt.Sprintf("queue:%d", s.Player1ID)
 			queueData := map[string]interface{}{
-				"user_id":  player1ID,
-				"username": player1Username,
-				"mmr":      player1MMR,
+				"user_id":  s.Player1ID,
+				"username": s.Username,
+				"mmr":      s.Mmr,
 			}
 			queueJSON, _ := json.Marshal(queueData)
 			redisClient.Set(ctx, queueKey, queueJSON, 0)
 		}
 
 		// Requeue player 2
-		_, err = db.Exec(
-			"INSERT INTO matchmaking_queue (user_id, mmr, joined_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE joined_at = NOW()",
-			player2ID, player2MMR,
-		)
-		if err == nil {
-			queueKey := fmt.Sprintf("queue:%d", player2ID)
+		if err := queries.RequeuePlayer(ctx, db.RequeuePlayerParams{UserID: s.Player2ID, Mmr: s.Mmr_2}); err == nil {
+			queueKey := fmt.Sprintf("queue:%d", s.Player2ID)
 			queueData := map[string]interface{}{
-				"user_id":  player2ID,
-				"username": player2Username,
-				"mmr":      player2MMR,
+				"user_id":  s.Player2ID,
+				"username": s.Username_2,
+				"mmr":      s.Mmr_2,
 			}
 			queueJSON, _ := json.Marshal(queueData)
 			redisClient.Set(ctx, queueKey, queueJSON, 0)
 		}
 
 		// Clear match notifications
-		redisClient.Del(ctx, fmt.Sprintf("match:%d", player1ID))
-		redisClient.Del(ctx, fmt.Sprintf("match:%d", player2ID))
+		redisClient.Del(ctx, fmt.Sprintf("match:%d", s.Player1ID))
+		redisClient.Del(ctx, fmt.Sprintf("match:%d", s.Player2ID))
 
-		expiredCount++
-		log.Printf("Match expired: session %s, requeued %s and %s", sessionID, player1Username, player2Username)
+		log.Printf("Match expired: session %s, requeued %s and %s", s.SessionID, s.Username, s.Username_2)
 	}
 
-	if expiredCount > 0 {
-		log.Printf("Handled %d expired matches", expiredCount)
+	if len(expired) > 0 {
+		log.Printf("Handled %d expired matches", len(expired))
 	}
 
 	return nil
@@ -334,27 +304,21 @@ func computeMatches(queue []QueueEntry) []MatchPair {
 
 // findMatches fetches the queue from database and creates game sessions for matches
 func findMatches() error {
-	// Get all players in queue ordered by join time (FIFO fairness)
-	rows, err := db.Query(`
-		SELECT q.user_id, u.username, q.mmr, q.joined_at
-		FROM matchmaking_queue q
-		JOIN users u ON q.user_id = u.id
-		WHERE u.is_banned = FALSE
-		ORDER BY q.joined_at ASC
-	`)
+	ctx := context.Background()
+
+	rows, err := queries.GetActiveQueue(ctx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
 	var queue []QueueEntry
-	for rows.Next() {
-		var entry QueueEntry
-		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.MMR, &entry.JoinedAt); err != nil {
-			log.Printf("Error scanning queue entry: %v", err)
-			continue
-		}
-		queue = append(queue, entry)
+	for _, r := range rows {
+		queue = append(queue, QueueEntry{
+			UserID:   r.UserID,
+			Username: r.Username,
+			MMR:      int(r.Mmr),
+			JoinedAt: r.JoinedAt,
+		})
 	}
 
 	// Compute matches using pure logic function

@@ -1,7 +1,7 @@
 .PHONY: help build build-auth build-matchmaking build-gameplay build-friendlist build-replay build-cursor-udp clean test run-auth run-matchmaking run-gameplay run-friendlist run-replay run-cursor-udp run-all docker-build docker-up docker-down sqlc-generate migrate-up migrate-down migrate-create migrate-force migrate-drop migrate-reset
 
 # Database configuration
-DB_URL := "mysql://$(shell grep MYSQL_USER .env | cut -d'=' -f2):$(shell grep MYSQL_PASSWORD .env | cut -d'=' -f2)@tcp(localhost:$(shell grep MYSQL_PORT .env | cut -d'=' -f2))/$(shell grep MYSQL_DATABASE .env | cut -d'=' -f2)"
+DB_URL := "mysql://$(shell grep MYSQL_USER .env | cut -d'=' -f2):$(shell grep MYSQL_PASSWORD .env | cut -d'=' -f2 | sed 's/+/%2B/g')@tcp(localhost:$(shell grep MYSQL_PORT .env | cut -d'=' -f2))/$(shell grep MYSQL_DATABASE .env | cut -d'=' -f2)"
 
 # Default target
 help:

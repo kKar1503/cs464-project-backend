@@ -12,3 +12,40 @@ sql:
         emit_interface: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "bigint"
+            nullable: true
+            go_type:
+              type: "int64"
+              pointer: true
+          - db_type: "int"
+            nullable: true
+            go_type:
+              type: "int32"
+              pointer: true
+          - db_type: "boolean"
+            nullable: true
+            go_type:
+              type: "bool"
+              pointer: true
+          - db_type: "tinyint"
+            nullable: true
+            go_type:
+              type: "bool"
+              pointer: true
+          - db_type: "timestamp"
+            nullable: true
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true
+          - db_type: "varchar"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+          - db_type: "text"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true

@@ -5,13 +5,178 @@
 package db
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 )
 
+type GameSessionsStatus string
+
+const (
+	GameSessionsStatusWaiting    GameSessionsStatus = "waiting"
+	GameSessionsStatusInProgress GameSessionsStatus = "in_progress"
+	GameSessionsStatusCompleted  GameSessionsStatus = "completed"
+	GameSessionsStatusCancelled  GameSessionsStatus = "cancelled"
+)
+
+func (e *GameSessionsStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = GameSessionsStatus(s)
+	case string:
+		*e = GameSessionsStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for GameSessionsStatus: %T", src)
+	}
+	return nil
+}
+
+type NullGameSessionsStatus struct {
+	GameSessionsStatus GameSessionsStatus `json:"game_sessions_status"`
+	Valid              bool               `json:"valid"` // Valid is true if GameSessionsStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullGameSessionsStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.GameSessionsStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.GameSessionsStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullGameSessionsStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.GameSessionsStatus), nil
+}
+
+type Affiliation struct {
+	AffiliationID int32     `json:"affiliation_id"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type BattleLog struct {
+	BattleID  int32     `json:"battle_id"`
+	Player1ID int64     `json:"player1_id"`
+	Player2ID int64     `json:"player2_id"`
+	WinnerID  int64     `json:"winner_id"`
+	StartedAt time.Time `json:"started_at"`
+	EndedAt   time.Time `json:"ended_at"`
+}
+
+type Card struct {
+	CardID      int32  `json:"card_id"`
+	CardName    string `json:"card_name"`
+	Affiliation int32  `json:"affiliation"`
+	Rarity      string `json:"rarity"`
+	ManaCost    int32  `json:"mana_cost"`
+	MaxLevel    int32  `json:"max_level"`
+	Description string `json:"description"`
+	IconUrl     string `json:"icon_url"`
+}
+
+type CardAbility struct {
+	AbilitiesID int32           `json:"abilities_id"`
+	CardID      int32           `json:"card_id"`
+	TriggerType string          `json:"trigger_type"`
+	Effect      string          `json:"effect"`
+	Abilties    json.RawMessage `json:"abilties"`
+}
+
+type CardPack struct {
+	PackID    int32      `json:"pack_id"`
+	PlayerID  int64      `json:"player_id"`
+	PackType  string     `json:"pack_type"`
+	IsOpened  bool       `json:"is_opened"`
+	OpenedAt  *time.Time `json:"opened_at"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+type CardStat struct {
+	CardStatsID int32     `json:"card_stats_id"`
+	CardID      int32     `json:"card_id"`
+	Level       int32     `json:"level"`
+	Power       int32     `json:"power"`
+	Hp          int32     `json:"hp"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type Deck struct {
+	DeckID    int32     `json:"deck_id"`
+	PlayerID  int64     `json:"player_id"`
+	CardID    int32     `json:"card_id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type DeckCard struct {
+	DeckCardID int32 `json:"deck_card_id"`
+	DeckID     int32 `json:"deck_id"`
+	CardID     int32 `json:"card_id"`
+	Position   int32 `json:"position"`
+}
+
+type GameSession struct {
+	ID               int64              `json:"id"`
+	SessionID        string             `json:"session_id"`
+	Player1ID        int64              `json:"player1_id"`
+	Player2ID        int64              `json:"player2_id"`
+	Status           GameSessionsStatus `json:"status"`
+	WinnerID         *int64             `json:"winner_id"`
+	Player1MmrChange *int32             `json:"player1_mmr_change"`
+	Player2MmrChange *int32             `json:"player2_mmr_change"`
+	StartedAt        *time.Time         `json:"started_at"`
+	EndedAt          *time.Time         `json:"ended_at"`
+	CreatedAt        *time.Time         `json:"created_at"`
+	UpdatedAt        *time.Time         `json:"updated_at"`
+	Player1Ready     *bool              `json:"player1_ready"`
+	Player2Ready     *bool              `json:"player2_ready"`
+	MatchExpiresAt   *time.Time         `json:"match_expires_at"`
+}
+
+type MatchmakingQueue struct {
+	ID       int64     `json:"id"`
+	UserID   int64     `json:"user_id"`
+	Mmr      int32     `json:"mmr"`
+	JoinedAt time.Time `json:"joined_at"`
+}
+
+type PlayerCard struct {
+	PalyerCardID int32 `json:"palyer_card_id"`
+	PlayerID     int64 `json:"player_id"`
+	CardID       int32 `json:"card_id"`
+	Level        int32 `json:"level"`
+	Quantity     int32 `json:"quantity"`
+	IsInDeck     bool  `json:"is_in_deck"`
+}
+
 type User struct {
-	ID           int64     `json:"id"`
-	Username     string    `json:"username"`
-	PasswordHash string    `json:"password_hash"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           int64      `json:"id"`
+	Username     string     `json:"username"`
+	PasswordHash string     `json:"password_hash"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	IsBanned     bool       `json:"is_banned"`
+	BannedAt     *time.Time `json:"banned_at"`
+	BanReason    *string    `json:"ban_reason"`
+	Mmr          int32      `json:"mmr"`
+}
+
+type UserSession struct {
+	ID           int64      `json:"id"`
+	UserID       int64      `json:"user_id"`
+	Token        string     `json:"token"`
+	IpAddress    *string    `json:"ip_address"`
+	UserAgent    *string    `json:"user_agent"`
+	ExpiresAt    time.Time  `json:"expires_at"`
+	CreatedAt    *time.Time `json:"created_at"`
+	RevokedAt    *time.Time `json:"revoked_at"`
+	LastActivity *time.Time `json:"last_activity"`
 }

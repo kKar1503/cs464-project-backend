@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	db "github.com/kKar1503/cs464-backend/db/sqlc"
 )
 
 const (
@@ -73,16 +74,10 @@ func handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := authUser.UserID
+	ctx := r.Context()
 
 	// Get user's MMR from database
-	var username string
-	var mmr int
-	var isBanned bool
-	err = db.QueryRow(
-		"SELECT username, mmr, is_banned FROM users WHERE id = ?",
-		userID,
-	).Scan(&username, &mmr, &isBanned)
-
+	user, err := queries.GetUserForMatchmaking(ctx, userID)
 	if err == sql.ErrNoRows {
 		respondError(w, "User not found", http.StatusNotFound)
 		return
@@ -93,35 +88,33 @@ func handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isBanned {
+	if user.IsBanned {
 		respondError(w, "Banned users cannot join matchmaking", http.StatusForbidden)
 		return
 	}
 
 	// Check if user has an ongoing game session
-	var ongoingSessionID string
-	err = db.QueryRow(
-		"SELECT session_id FROM game_sessions WHERE (player1_id = ? OR player2_id = ?) AND status IN ('waiting', 'in_progress')",
-		userID, userID,
-	).Scan(&ongoingSessionID)
+	ongoingSessionID, err := queries.GetOngoingGameSession(ctx, db.GetOngoingGameSessionParams{
+		Player1ID: userID,
+		Player2ID: userID,
+	})
 	if err == nil {
 		respondError(w, fmt.Sprintf("Cannot join queue: already in game session %s", ongoingSessionID), http.StatusConflict)
 		return
 	}
 
 	// Check if already in queue
-	var existingID int64
-	err = db.QueryRow("SELECT id FROM matchmaking_queue WHERE user_id = ?", userID).Scan(&existingID)
+	_, err = queries.GetQueueEntryByUserID(ctx, userID)
 	if err == nil {
 		respondError(w, "Already in queue", http.StatusConflict)
 		return
 	}
 
 	// Add to matchmaking queue
-	_, err = db.Exec(
-		"INSERT INTO matchmaking_queue (user_id, mmr) VALUES (?, ?)",
-		userID, mmr,
-	)
+	err = queries.InsertIntoQueue(ctx, db.InsertIntoQueueParams{
+		UserID: userID,
+		Mmr:    user.Mmr,
+	})
 	if err != nil {
 		log.Printf("Failed to add to queue: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
@@ -129,12 +122,11 @@ func handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Also add to Redis for faster lookups
-	ctx := context.Background()
 	queueKey := fmt.Sprintf("queue:%d", userID)
 	queueData := map[string]interface{}{
 		"user_id":   userID,
-		"username":  username,
-		"mmr":       mmr,
+		"username":  user.Username,
+		"mmr":       user.Mmr,
 		"joined_at": time.Now().Unix(),
 	}
 	queueJSON, _ := json.Marshal(queueData)
@@ -143,7 +135,7 @@ func handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, map[string]interface{}{
 		"message":  "Added to matchmaking queue",
 		"user_id":  userID,
-		"mmr":      mmr,
+		"mmr":      user.Mmr,
 		"position": "searching",
 	}, http.StatusOK)
 }
@@ -163,9 +155,10 @@ func handleLeaveQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := authUser.UserID
+	ctx := r.Context()
 
 	// Remove from database queue
-	result, err := db.Exec("DELETE FROM matchmaking_queue WHERE user_id = ?", userID)
+	result, err := queries.DeleteFromQueue(ctx, userID)
 	if err != nil {
 		log.Printf("Failed to remove from queue: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
@@ -179,7 +172,6 @@ func handleLeaveQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove from Redis
-	ctx := context.Background()
 	queueKey := fmt.Sprintf("queue:%d", userID)
 	redisClient.Del(ctx, queueKey)
 
@@ -203,14 +195,9 @@ func handleQueueStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := authUser.UserID
+	ctx := r.Context()
 
-	var mmr int
-	var joinedAt time.Time
-	err = db.QueryRow(
-		"SELECT mmr, joined_at FROM matchmaking_queue WHERE user_id = ?",
-		userID,
-	).Scan(&mmr, &joinedAt)
-
+	status, err := queries.GetQueueStatus(ctx, userID)
 	if err == sql.ErrNoRows {
 		respondJSON(w, QueueStatus{InQueue: false}, http.StatusOK)
 		return
@@ -221,13 +208,13 @@ func handleQueueStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	waitTime := int(time.Since(joinedAt).Seconds())
-	mmrRange := calculateMMRRange(mmr, waitTime)
+	waitTime := int(time.Since(status.JoinedAt).Seconds())
+	mmrRange := calculateMMRRange(int(status.Mmr), waitTime)
 
 	respondJSON(w, QueueStatus{
 		InQueue:  true,
-		QueuedAt: joinedAt,
-		MMR:      mmr,
+		QueuedAt: status.JoinedAt,
+		MMR:      int(status.Mmr),
 		WaitTime: waitTime,
 		MMRRange: fmt.Sprintf("%d - %d", mmrRange.min, mmrRange.max),
 	}, http.StatusOK)
@@ -287,23 +274,28 @@ type MatchResponseRequest struct {
 // createGameSession creates a new game session for matched players
 func createGameSession(player1, player2 QueueEntry) (string, error) {
 	sessionID := uuid.New().String()
+	ctx := context.Background()
 
 	// Set expiry time for match acceptance
 	expiresAt := time.Now().Add(matchAcceptTimeout * time.Second)
 
-	_, err := db.Exec(
-		"INSERT INTO game_sessions (session_id, player1_id, player2_id, status, created_at, match_expires_at) VALUES (?, ?, ?, 'waiting', NOW(), ?)",
-		sessionID, player1.UserID, player2.UserID, expiresAt,
-	)
+	err := queries.CreateGameSession(ctx, db.CreateGameSessionParams{
+		SessionID:      sessionID,
+		Player1ID:      player1.UserID,
+		Player2ID:      player2.UserID,
+		MatchExpiresAt: &expiresAt,
+	})
 	if err != nil {
 		return "", err
 	}
 
 	// Remove both players from queue
-	db.Exec("DELETE FROM matchmaking_queue WHERE user_id IN (?, ?)", player1.UserID, player2.UserID)
+	queries.DeleteFromQueueByUsers(ctx, db.DeleteFromQueueByUsersParams{
+		UserID:   player1.UserID,
+		UserID_2: player2.UserID,
+	})
 
 	// Remove from Redis
-	ctx := context.Background()
 	redisClient.Del(ctx, fmt.Sprintf("queue:%d", player1.UserID))
 	redisClient.Del(ctx, fmt.Sprintf("queue:%d", player2.UserID))
 
@@ -363,15 +355,10 @@ func handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get session details to determine which player is ready
-	var player1ID, player2ID int64
-	var player1Ready, player2Ready bool
-	var status string
-	err = db.QueryRow(
-		"SELECT player1_id, player2_id, player1_ready, player2_ready, status FROM game_sessions WHERE session_id = ?",
-		req.SessionID,
-	).Scan(&player1ID, &player2ID, &player1Ready, &player2Ready, &status)
+	ctx := r.Context()
 
+	// Get session details to determine which player is ready
+	session, err := queries.GetSessionForAccept(ctx, req.SessionID)
 	if err == sql.ErrNoRows {
 		respondError(w, "Session not found", http.StatusNotFound)
 		return
@@ -383,19 +370,21 @@ func handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if session is in waiting state
-	if status != "waiting" {
+	if session.Status != db.GameSessionsStatusWaiting {
 		respondError(w, "Session is not in waiting state", http.StatusBadRequest)
 		return
 	}
 
 	// Check if user is part of this session
-	if userID != player1ID && userID != player2ID {
+	if userID != session.Player1ID && userID != session.Player2ID {
 		respondError(w, "User is not part of this session", http.StatusForbidden)
 		return
 	}
 
 	// Determine which player is ready
-	isPlayer1 := userID == player1ID
+	isPlayer1 := userID == session.Player1ID
+	player1Ready := session.Player1Ready != nil && *session.Player1Ready
+	player2Ready := session.Player2Ready != nil && *session.Player2Ready
 	if isPlayer1 {
 		player1Ready = true
 	} else {
@@ -408,24 +397,16 @@ func handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
 	// Update the session
 	var result sql.Result
 	if bothReady {
-		// Both players ready - start the game and clear expiry
-		result, err = db.Exec(
-			"UPDATE game_sessions SET player1_ready = ?, player2_ready = ?, status = 'in_progress', started_at = NOW(), match_expires_at = NULL WHERE session_id = ? AND status = 'waiting'",
-			player1Ready, player2Ready, req.SessionID,
-		)
+		t := true
+		result, err = queries.StartGameSession(ctx, db.StartGameSessionParams{
+			Player1Ready: &t,
+			Player2Ready: &t,
+			SessionID:    req.SessionID,
+		})
+	} else if isPlayer1 {
+		result, err = queries.SetPlayer1Ready(ctx, req.SessionID)
 	} else {
-		// Mark this player as ready
-		if isPlayer1 {
-			result, err = db.Exec(
-				"UPDATE game_sessions SET player1_ready = TRUE WHERE session_id = ? AND status = 'waiting'",
-				req.SessionID,
-			)
-		} else {
-			result, err = db.Exec(
-				"UPDATE game_sessions SET player2_ready = TRUE WHERE session_id = ? AND status = 'waiting'",
-				req.SessionID,
-			)
-		}
+		result, err = queries.SetPlayer2Ready(ctx, req.SessionID)
 	}
 
 	if err != nil {
@@ -486,20 +467,10 @@ func handleRejectMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get session details
-	var player1ID, player2ID int64
-	var player1Username, player2Username string
-	var player1MMR, player2MMR int
-	var status string
-	err = db.QueryRow(
-		"SELECT gs.player1_id, gs.player2_id, u1.username, u2.username, u1.mmr, u2.mmr, gs.status "+
-			"FROM game_sessions gs "+
-			"JOIN users u1 ON gs.player1_id = u1.id "+
-			"JOIN users u2 ON gs.player2_id = u2.id "+
-			"WHERE gs.session_id = ?",
-		req.SessionID,
-	).Scan(&player1ID, &player2ID, &player1Username, &player2Username, &player1MMR, &player2MMR, &status)
+	ctx := r.Context()
 
+	// Get session details
+	session, err := queries.GetSessionWithPlayers(ctx, req.SessionID)
 	if err == sql.ErrNoRows {
 		respondError(w, "Session not found", http.StatusNotFound)
 		return
@@ -511,57 +482,43 @@ func handleRejectMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if session is in waiting state
-	if status != "waiting" {
+	if session.Status != db.GameSessionsStatusWaiting {
 		respondError(w, "Session is not in waiting state", http.StatusBadRequest)
 		return
 	}
 
 	// Check if user is part of this session
-	if userID != player1ID && userID != player2ID {
+	if userID != session.Player1ID && userID != session.Player2ID {
 		respondError(w, "User is not part of this session", http.StatusForbidden)
 		return
 	}
 
 	// Cancel the session
-	_, err = db.Exec(
-		"UPDATE game_sessions SET status = 'cancelled' WHERE session_id = ?",
-		req.SessionID,
-	)
-	if err != nil {
+	if err := queries.CancelGameSession(ctx, req.SessionID); err != nil {
 		log.Printf("Failed to cancel session: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Only requeue the OTHER player (not the one who rejected)
-	ctx := context.Background()
-
 	// Determine which player to requeue (the one who didn't reject)
 	var requeueUserID int64
 	var requeueUsername string
-	var requeueMMR int
+	var requeueMMR int32
 
-	if userID == player1ID {
-		// Player 1 rejected, requeue player 2
-		requeueUserID = player2ID
-		requeueUsername = player2Username
-		requeueMMR = player2MMR
+	if userID == session.Player1ID {
+		requeueUserID = session.Player2ID
+		requeueUsername = session.Username_2
+		requeueMMR = session.Mmr_2
 	} else {
-		// Player 2 rejected, requeue player 1
-		requeueUserID = player1ID
-		requeueUsername = player1Username
-		requeueMMR = player1MMR
+		requeueUserID = session.Player1ID
+		requeueUsername = session.Username
+		requeueMMR = session.Mmr
 	}
 
 	// Requeue the non-rejecting player
-	_, err = db.Exec(
-		"INSERT INTO matchmaking_queue (user_id, mmr, joined_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE joined_at = NOW()",
-		requeueUserID, requeueMMR,
-	)
-	if err != nil {
+	if err := queries.RequeuePlayer(ctx, db.RequeuePlayerParams{UserID: requeueUserID, Mmr: requeueMMR}); err != nil {
 		log.Printf("Failed to requeue user %d: %v", requeueUserID, err)
 	} else {
-		// Add to Redis
 		queueKey := fmt.Sprintf("queue:%d", requeueUserID)
 		queueData := map[string]interface{}{
 			"user_id":  requeueUserID,
@@ -573,8 +530,8 @@ func handleRejectMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clear match notifications from Redis for both players
-	redisClient.Del(ctx, fmt.Sprintf("match:%d", player1ID))
-	redisClient.Del(ctx, fmt.Sprintf("match:%d", player2ID))
+	redisClient.Del(ctx, fmt.Sprintf("match:%d", session.Player1ID))
+	redisClient.Del(ctx, fmt.Sprintf("match:%d", session.Player2ID))
 
 	log.Printf("Match rejected by user %d, session %s cancelled, user %d requeued", userID, req.SessionID, requeueUserID)
 
@@ -602,17 +559,10 @@ func handleEndGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch session details
-	var player1ID, player2ID int64
-	var player1MMR, player2MMR int
-	err := db.QueryRow(
-		"SELECT gs.player1_id, gs.player2_id, u1.mmr, u2.mmr FROM game_sessions gs "+
-			"JOIN users u1 ON gs.player1_id = u1.id "+
-			"JOIN users u2 ON gs.player2_id = u2.id "+
-			"WHERE gs.session_id = ? AND gs.status = 'in_progress'",
-		req.SessionID,
-	).Scan(&player1ID, &player2ID, &player1MMR, &player2MMR)
+	ctx := r.Context()
 
+	// Fetch session details
+	session, err := queries.GetSessionForEndGame(ctx, req.SessionID)
 	if err == sql.ErrNoRows {
 		respondError(w, "Session not found or not in progress", http.StatusNotFound)
 		return
@@ -624,12 +574,12 @@ func handleEndGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Calculate MMR changes
-	var player1MMRChange, player2MMRChange int
+	var player1MMRChange, player2MMRChange int32
 	if req.WinnerID != nil {
-		if *req.WinnerID == player1ID {
+		if *req.WinnerID == session.Player1ID {
 			player1MMRChange = mmrWinGain
 			player2MMRChange = -mmrLossDeduction
-		} else if *req.WinnerID == player2ID {
+		} else if *req.WinnerID == session.Player2ID {
 			player1MMRChange = -mmrLossDeduction
 			player2MMRChange = mmrWinGain
 		} else {
@@ -638,15 +588,17 @@ func handleEndGame(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Update players' MMR in database
-		db.Exec("UPDATE users SET mmr = mmr + ? WHERE id = ?", player1MMRChange, player1ID)
-		db.Exec("UPDATE users SET mmr = mmr + ? WHERE id = ?", player2MMRChange, player2ID)
+		queries.UpdateUserMMR(ctx, db.UpdateUserMMRParams{Mmr: player1MMRChange, ID: session.Player1ID})
+		queries.UpdateUserMMR(ctx, db.UpdateUserMMRParams{Mmr: player2MMRChange, ID: session.Player2ID})
 	}
 
 	// Update session status to completed
-	_, err = db.Exec(
-		"UPDATE game_sessions SET status = 'completed', ended_at = NOW(), winner_id = ?, player1_mmr_change = ?, player2_mmr_change = ? WHERE session_id = ?",
-		req.WinnerID, player1MMRChange, player2MMRChange, req.SessionID,
-	)
+	err = queries.CompleteGameSession(ctx, db.CompleteGameSessionParams{
+		WinnerID:         req.WinnerID,
+		Player1MmrChange: &player1MMRChange,
+		Player2MmrChange: &player2MMRChange,
+		SessionID:        req.SessionID,
+	})
 	if err != nil {
 		log.Printf("Failed to end game: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
@@ -660,8 +612,8 @@ func handleEndGame(w http.ResponseWriter, r *http.Request) {
 		"winner_id":          req.WinnerID,
 		"player1_mmr_change": player1MMRChange,
 		"player2_mmr_change": player2MMRChange,
-		"player1_new_mmr":    player1MMR + player1MMRChange,
-		"player2_new_mmr":    player2MMR + player2MMRChange,
+		"player1_new_mmr":    session.Mmr + player1MMRChange,
+		"player2_new_mmr":    session.Mmr_2 + player2MMRChange,
 	}, http.StatusOK)
 }
 
@@ -678,17 +630,9 @@ func handleGetSessionStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var player1ID, player2ID int64
-	var status string
-	var winnerID sql.NullInt64
-	var startedAt, endedAt sql.NullTime
-	var player1MMRChange, player2MMRChange int
+	ctx := r.Context()
 
-	err := db.QueryRow(
-		"SELECT player1_id, player2_id, status, winner_id, started_at, ended_at, player1_mmr_change, player2_mmr_change FROM game_sessions WHERE session_id = ?",
-		sessionID,
-	).Scan(&player1ID, &player2ID, &status, &winnerID, &startedAt, &endedAt, &player1MMRChange, &player2MMRChange)
-
+	session, err := queries.GetSessionStatus(ctx, sessionID)
 	if err == sql.ErrNoRows {
 		respondError(w, "Session not found", http.StatusNotFound)
 		return
@@ -701,21 +645,21 @@ func handleGetSessionStatus(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"session_id":         sessionID,
-		"player1_id":         player1ID,
-		"player2_id":         player2ID,
-		"status":             status,
-		"player1_mmr_change": player1MMRChange,
-		"player2_mmr_change": player2MMRChange,
+		"player1_id":         session.Player1ID,
+		"player2_id":         session.Player2ID,
+		"status":             session.Status,
+		"player1_mmr_change": session.Player1MmrChange,
+		"player2_mmr_change": session.Player2MmrChange,
 	}
 
-	if winnerID.Valid {
-		response["winner_id"] = winnerID.Int64
+	if session.WinnerID != nil {
+		response["winner_id"] = *session.WinnerID
 	}
-	if startedAt.Valid {
-		response["started_at"] = startedAt.Time
+	if session.StartedAt != nil {
+		response["started_at"] = *session.StartedAt
 	}
-	if endedAt.Valid {
-		response["ended_at"] = endedAt.Time
+	if session.EndedAt != nil {
+		response["ended_at"] = *session.EndedAt
 	}
 
 	respondJSON(w, response, http.StatusOK)
