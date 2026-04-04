@@ -18,10 +18,6 @@ func GetActionHandler(action string) ActionHandler {
 
 // Initialize all action handlers
 func init() {
-	// Joseph made ones (i.e. sketchy af)
-	RegisterActionHandler("CARD_PLACED", HandleCardPlaced)
-	RegisterActionHandler("CARD_ATTACK", HandleAttackRequest)
-	
 	RegisterActionHandler("JOIN_GAME", HandleJoinGame)
 	RegisterActionHandler("CLICK", HandleClick)
 	RegisterActionHandler("END_TURN", HandleEndTurn)

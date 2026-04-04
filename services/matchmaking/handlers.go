@@ -13,13 +13,13 @@ import (
 )
 
 const (
-	initialMMRRange    = 100 // ±100 MMR initially
+	initialMMRRange   = 100 // ±100 MMR initially
 	rangeExpansionRate = 50  // +50 MMR per 10 seconds
 	expansionInterval  = 10  // Expand every 10 seconds
-	maxMMRRange        = 500 // Maximum ±500 MMR
-	mmrWinGain         = 15  // MMR gained on win
-	mmrLossDeduction   = 10  // MMR lost on loss
-	matchAcceptTimeout = 30  // Seconds to accept/reject match
+	maxMMRRange       = 500 // Maximum ±500 MMR
+	mmrWinGain        = 15  // MMR gained on win
+	mmrLossDeduction  = 10  // MMR lost on loss
+	matchAcceptTimeout = 30 // Seconds to accept/reject match
 )
 
 // Request/Response structures
@@ -32,11 +32,11 @@ type LeaveQueueRequest struct {
 }
 
 type QueueStatus struct {
-	InQueue  bool      `json:"in_queue"`
-	QueuedAt time.Time `json:"queued_at,omitempty"`
-	MMR      int       `json:"mmr,omitempty"`
-	WaitTime int       `json:"wait_time_seconds,omitempty"`
-	MMRRange string    `json:"mmr_range,omitempty"`
+	InQueue    bool      `json:"in_queue"`
+	QueuedAt   time.Time `json:"queued_at,omitempty"`
+	MMR        int       `json:"mmr,omitempty"`
+	WaitTime   int       `json:"wait_time_seconds,omitempty"`
+	MMRRange   string    `json:"mmr_range,omitempty"`
 }
 
 type MatchFoundResponse struct {
