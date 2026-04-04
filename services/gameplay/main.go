@@ -141,16 +141,22 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Add authentication - for now using query params
-	userIDStr := r.URL.Query().Get("user_id")
-	username := r.URL.Query().Get("username")
-	if userIDStr == "" || username == "" {
-		http.Error(w, "user_id and username required", http.StatusBadRequest)
+	// Authenticate via token
+	token := extractToken(r)
+	if token == "" {
+		http.Error(w, "Missing authorization token", http.StatusUnauthorized)
 		return
 	}
 
-	var userID int64
-	fmt.Sscanf(userIDStr, "%d", &userID)
+	authUser, err := validateToken(token)
+	if err != nil {
+		log.Printf("Auth validation failed: %v", err)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	userID := authUser.UserID
+	username := authUser.Username
 
 	// Fetch session info from database
 	sessionInfo, err := queries.GetGameSessionPlayers(r.Context(), sessionID)
