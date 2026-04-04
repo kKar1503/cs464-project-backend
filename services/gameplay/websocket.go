@@ -21,36 +21,36 @@ const (
 
 // ClientMessage represents a message from the client
 type ClientMessage struct {
-	Action         GameAction      `json:"action"`
-	Params         json.RawMessage `json:"params"`           // Raw JSON params (unparsed until handler)
-	StateHashAfter uint64          `json:"state_hash_after"` // Hash of client's state AFTER applying action
-	SequenceNumber int64           `json:"sequence_number"`
+	Action          GameAction      `json:"action"`
+	Params          json.RawMessage `json:"params"`            // Raw JSON params (unparsed until handler)
+	StateHashAfter  uint64          `json:"state_hash_after"`  // Hash of client's state AFTER applying action
+	SequenceNumber  int64           `json:"sequence_number"`
 }
 
 // ServerMessage represents a message to the client
 type ServerMessage struct {
-	MessageType    string      `json:"message_type"` // "state_update", "action_result", "error"
-	Action         GameAction  `json:"action,omitempty"`
-	Params         interface{} `json:"params,omitempty"` // Action parameters (e.g., TurnEndParams)
-	Result         string      `json:"result,omitempty"` // "success", "failure"
-	ErrorMessage   string      `json:"error_message,omitempty"`
-	StateView      *PlayerView `json:"state_view,omitempty"`
-	SequenceNumber int64       `json:"sequence_number"`
-	Timestamp      time.Time   `json:"timestamp"`
+	MessageType    string          `json:"message_type"` // "state_update", "action_result", "error"
+	Action         GameAction      `json:"action,omitempty"`
+	Params         interface{}     `json:"params,omitempty"` // Action parameters (e.g., TurnEndParams)
+	Result         string          `json:"result,omitempty"` // "success", "failure"
+	ErrorMessage   string          `json:"error_message,omitempty"`
+	StateView      *PlayerView     `json:"state_view,omitempty"`
+	SequenceNumber int64           `json:"sequence_number"`
+	Timestamp      time.Time       `json:"timestamp"`
 }
 
 // PlayerConnection represents a WebSocket connection for a player
 type PlayerConnection struct {
-	SessionID       string
-	PlayerID        PlayerID
-	UserID          int64
-	Username        string
-	Conn            *websocket.Conn
-	Send            chan *ServerMessage
-	Session         *GameSession
-	Manager         *GameStateManager
-	mu              sync.Mutex
-	closed          bool
+	SessionID  string
+	PlayerID   PlayerID
+	UserID     int64
+	Username   string
+	Conn       *websocket.Conn
+	Send       chan *ServerMessage
+	Session    *GameSession
+	Manager    *GameStateManager
+	mu         sync.Mutex
+	closed     bool
 }
 
 // NewPlayerConnection creates a new player connection

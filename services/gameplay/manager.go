@@ -16,15 +16,14 @@ const (
 
 // GameSession represents an active game session with its state and connections
 type GameSession struct {
-	State           *GameState
-	SnapshotManager *SnapshotManager
-	Player1Conn     *PlayerConnection
-	Player2Conn     *PlayerConnection
-	TurnTimer       *TurnTimer
-	CreatedAt       time.Time
-	LastActivityAt  time.Time
-	GameplayManager *GameplayManager
-	mu              sync.RWMutex
+	State            *GameState
+	SnapshotManager  *SnapshotManager
+	Player1Conn      *PlayerConnection
+	Player2Conn      *PlayerConnection
+	TurnTimer        *TurnTimer
+	CreatedAt        time.Time
+	LastActivityAt   time.Time
+	mu               sync.RWMutex
 }
 
 // NewGameSession creates a new game session
@@ -34,7 +33,6 @@ func NewGameSession(sessionID string, player1ID, player2ID int64, player1Name, p
 		State:           NewGameState(sessionID, player1ID, player2ID, player1Name, player2Name),
 		SnapshotManager: NewSnapshotManager(sessionID, SnapshotBufferSize),
 		CreatedAt:       now,
-		GameplayManager: NewGameplayManager(sessionID, player1ID, player2ID),
 		LastActivityAt:  now,
 	}
 	session.TurnTimer = NewTurnTimer(session)
