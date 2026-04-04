@@ -12,11 +12,13 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	db "github.com/kKar1503/cs464-backend/db/sqlc"
 	"github.com/redis/go-redis/v9"
 )
 
 var (
-	db          *sql.DB
+	sqlDB       *sql.DB
+	queries     *db.Queries
 	redisClient *redis.Client
 )
 
@@ -33,16 +35,17 @@ func main() {
 		os.Getenv("DB_NAME"),
 	)
 
-	db, err = sql.Open("mysql", dsn)
+	sqlDB, err = sql.Open("mysql", dsn)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
+	defer sqlDB.Close()
 
 	// Test database connection
-	if err := db.Ping(); err != nil {
+	if err := sqlDB.Ping(); err != nil {
 		log.Fatalf("Failed to ping database: %v", err)
 	}
+	queries = db.New(sqlDB)
 	log.Println("Connected to MySQL database")
 
 	// Initialize Redis client

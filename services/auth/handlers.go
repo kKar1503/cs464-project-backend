@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	db "github.com/kKar1503/cs464-backend/db/sqlc"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -98,10 +99,10 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Insert user into database
-	result, err := db.Exec(
-		"INSERT INTO users (username, password_hash) VALUES (?, ?)",
-		req.Username, string(hashedPassword),
-	)
+	result, err := queries.CreateUserAuth(r.Context(), db.CreateUserAuthParams{
+		Username:     req.Username,
+		PasswordHash: string(hashedPassword),
+	})
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate entry") {
 			respondError(w, "Username already exists", http.StatusConflict)
@@ -141,15 +142,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch user from database
-	var userID int64
-	var username, passwordHash string
-	var isBanned bool
-	var banReason sql.NullString
-	err := db.QueryRow(
-		"SELECT id, username, password_hash, is_banned, ban_reason FROM users WHERE username = ?",
-		req.Username,
-	).Scan(&userID, &username, &passwordHash, &isBanned, &banReason)
-
+	user, err := queries.GetUserByUsernameAuth(r.Context(), req.Username)
 	if err == sql.ErrNoRows {
 		respondError(w, "Invalid credentials", http.StatusUnauthorized)
 		return
@@ -161,23 +154,23 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user is banned
-	if isBanned {
+	if user.IsBanned {
 		reason := "No reason provided"
-		if banReason.Valid {
-			reason = banReason.String
+		if user.BanReason != nil {
+			reason = *user.BanReason
 		}
 		respondError(w, fmt.Sprintf("Account is banned: %s", reason), http.StatusForbidden)
 		return
 	}
 
 	// Verify password
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		respondError(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
 	// Invalidate previous sessions (single session per user)
-	if err := invalidateUserSessions(userID); err != nil {
+	if err := invalidateUserSessions(user.ID); err != nil {
 		log.Printf("Failed to invalidate previous sessions: %v", err)
 	}
 
@@ -192,10 +185,15 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	expiresAt := time.Now().Add(sessionTTL)
 
 	// Store session in MySQL
-	_, err = db.Exec(
-		"INSERT INTO user_sessions (user_id, token, ip_address, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)",
-		userID, token, getClientIP(r), r.UserAgent(), expiresAt,
-	)
+	ip := getClientIP(r)
+	ua := r.UserAgent()
+	err = queries.CreateSession(r.Context(), db.CreateSessionParams{
+		UserID:    user.ID,
+		Token:     token,
+		IpAddress: &ip,
+		UserAgent: &ua,
+		ExpiresAt: expiresAt,
+	})
 	if err != nil {
 		log.Printf("Failed to create session in DB: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
@@ -205,21 +203,20 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Store session in Redis for fast validation
 	ctx := context.Background()
 	sessionData := SessionData{
-		UserID:    userID,
-		Username:  username,
+		UserID:    user.ID,
+		Username:  user.Username,
 		ExpiresAt: expiresAt.Unix(),
 	}
 	sessionJSON, _ := json.Marshal(sessionData)
 	redisKey := fmt.Sprintf(sessionKeyFmt, token)
 	if err := redisClient.Set(ctx, redisKey, sessionJSON, sessionTTL).Err(); err != nil {
 		log.Printf("Failed to cache session in Redis: %v", err)
-		// Continue anyway, we can fall back to MySQL
 	}
 
 	respondJSON(w, AuthResponse{
 		Token:     token,
-		UserID:    userID,
-		Username:  username,
+		UserID:    user.ID,
+		Username:  user.Username,
 		ExpiresAt: expiresAt,
 	}, http.StatusOK)
 }
@@ -243,10 +240,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	redisClient.Del(ctx, redisKey)
 
 	// Revoke in MySQL
-	_, err := db.Exec(
-		"UPDATE user_sessions SET revoked_at = NOW() WHERE token = ? AND revoked_at IS NULL",
-		token,
-	)
+	err := queries.RevokeSessionByToken(r.Context(), token)
 	if err != nil {
 		log.Printf("Failed to revoke session: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
@@ -289,17 +283,7 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fallback to MySQL
-	var userID int64
-	var username string
-	var expiresAt time.Time
-	var isBanned bool
-	err = db.QueryRow(
-		"SELECT s.user_id, u.username, s.expires_at, u.is_banned FROM user_sessions s "+
-			"JOIN users u ON s.user_id = u.id "+
-			"WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > NOW()",
-		token,
-	).Scan(&userID, &username, &expiresAt, &isBanned)
-
+	session, err := queries.ValidateSession(r.Context(), token)
 	if err == sql.ErrNoRows {
 		respondJSON(w, ValidateResponse{Valid: false}, http.StatusOK)
 		return
@@ -311,27 +295,27 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user is banned
-	if isBanned {
+	if session.IsBanned {
 		respondJSON(w, ValidateResponse{Valid: false}, http.StatusOK)
 		return
 	}
 
 	// Repopulate Redis cache
 	sessionData := SessionData{
-		UserID:    userID,
-		Username:  username,
-		ExpiresAt: expiresAt.Unix(),
+		UserID:    session.UserID,
+		Username:  session.Username,
+		ExpiresAt: session.ExpiresAt.Unix(),
 	}
 	sessionJSONBytes, _ := json.Marshal(sessionData)
-	ttl := time.Until(expiresAt)
+	ttl := time.Until(session.ExpiresAt)
 	if ttl > 0 {
 		redisClient.Set(ctx, redisKey, string(sessionJSONBytes), ttl)
 	}
 
 	respondJSON(w, ValidateResponse{
 		Valid:    true,
-		UserID:   userID,
-		Username: username,
+		UserID:   session.UserID,
+		Username: session.Username,
 	}, http.StatusOK)
 }
 
@@ -375,31 +359,19 @@ func invalidateUserSessions(userID int64) error {
 	ctx := context.Background()
 
 	// Get all active tokens for this user
-	rows, err := db.Query(
-		"SELECT token FROM user_sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > NOW()",
-		userID,
-	)
+	tokens, err := queries.GetActiveTokensByUser(ctx, userID)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
 	// Delete from Redis
-	for rows.Next() {
-		var token string
-		if err := rows.Scan(&token); err != nil {
-			continue
-		}
+	for _, token := range tokens {
 		redisKey := fmt.Sprintf(sessionKeyFmt, token)
 		redisClient.Del(ctx, redisKey)
 	}
 
 	// Revoke in MySQL
-	_, err = db.Exec(
-		"UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL",
-		userID,
-	)
-	return err
+	return queries.RevokeAllUserSessions(ctx, userID)
 }
 
 func generateToken() (string, error) {
@@ -463,10 +435,10 @@ func handleBanUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ban the user in database
-	_, err := db.Exec(
-		"UPDATE users SET is_banned = TRUE, banned_at = NOW(), ban_reason = ? WHERE id = ?",
-		req.Reason, req.UserID,
-	)
+	err := queries.BanUser(r.Context(), db.BanUserParams{
+		BanReason: &req.Reason,
+		ID:        req.UserID,
+	})
 	if err != nil {
 		log.Printf("Failed to ban user: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
@@ -504,10 +476,7 @@ func handleUnbanUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Unban the user
-	_, err := db.Exec(
-		"UPDATE users SET is_banned = FALSE, banned_at = NULL, ban_reason = NULL WHERE id = ?",
-		req.UserID,
-	)
+	err := queries.UnbanUser(r.Context(), req.UserID)
 	if err != nil {
 		log.Printf("Failed to unban user: %v", err)
 		respondError(w, "Internal server error", http.StatusInternalServerError)
