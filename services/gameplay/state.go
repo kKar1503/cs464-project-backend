@@ -20,6 +20,8 @@ const (
 	ActionSurrender  GameAction = "SURRENDER"
 	ActionDisconnect GameAction = "DISCONNECT"
 	ActionReconnect  GameAction = "RECONNECT"
+	ActionCardPlaced GameAction = "CARD_PLACED"
+	ActionCardAttack GameAction = "CARD_ATTACK"
 )
 
 // GamePhase represents the current phase of the game
@@ -51,20 +53,20 @@ type PlayerState struct {
 
 	// GameData is where you'll store your custom game state as JSON
 	// This allows you to define your own game structure
-	GameData       json.RawMessage `json:"game_data,omitempty"`
+	GameData json.RawMessage `json:"game_data,omitempty"`
 }
 
 // GameState represents the complete game state
 type GameState struct {
-	SessionID      string             `json:"session_id"`
-	Phase          GamePhase          `json:"phase"`
-	TurnNumber     int                `json:"turn_number"`
-	CurrentPlayer  PlayerID           `json:"current_player"`
-	Player1        *PlayerState       `json:"player1"`
-	Player2        *PlayerState       `json:"player2"`
-	StartedAt      time.Time          `json:"started_at"`
-	LastUpdateAt   time.Time          `json:"last_update_at"`
-	WinnerID       PlayerID           `json:"winner_id,omitempty"`
+	SessionID     string       `json:"session_id"`
+	Phase         GamePhase    `json:"phase"`
+	TurnNumber    int          `json:"turn_number"`
+	CurrentPlayer PlayerID     `json:"current_player"`
+	Player1       *PlayerState `json:"player1"`
+	Player2       *PlayerState `json:"player2"`
+	StartedAt     time.Time    `json:"started_at"`
+	LastUpdateAt  time.Time    `json:"last_update_at"`
+	WinnerID      PlayerID     `json:"winner_id,omitempty"`
 
 	// Metadata - per-player sequence numbers
 	Player1SequenceNumber int64 `json:"player1_sequence_number"` // Increments with each Player1 action
@@ -83,15 +85,15 @@ type PlayerView struct {
 	SequenceNumber int64     `json:"sequence_number"`
 
 	// Your player info
-	YourUserID     int64  `json:"your_user_id"`
-	YourUsername   string `json:"your_username"`
-	YourGameData   json.RawMessage `json:"your_game_data,omitempty"`  // Your custom game state
+	YourUserID   int64           `json:"your_user_id"`
+	YourUsername string          `json:"your_username"`
+	YourGameData json.RawMessage `json:"your_game_data,omitempty"` // Your custom game state
 
 	// Opponent's info
-	OpponentUserID    int64  `json:"opponent_user_id"`
-	OpponentUsername  string `json:"opponent_username"`
-	OpponentConnected bool   `json:"opponent_connected"`
-	OpponentGameData  json.RawMessage `json:"opponent_game_data,omitempty"`  // Opponent's custom game state (partial)
+	OpponentUserID    int64           `json:"opponent_user_id"`
+	OpponentUsername  string          `json:"opponent_username"`
+	OpponentConnected bool            `json:"opponent_connected"`
+	OpponentGameData  json.RawMessage `json:"opponent_game_data,omitempty"` // Opponent's custom game state (partial)
 
 	// Computed hash of this view
 	StateHash uint64 `json:"state_hash"`
@@ -102,10 +104,10 @@ func NewGameState(sessionID string, player1ID, player2ID int64, player1Name, pla
 	now := time.Now()
 
 	return &GameState{
-		SessionID:      sessionID,
-		Phase:          PhaseWaitingForPlayers,
-		TurnNumber:     0,
-		CurrentPlayer:  Player1,
+		SessionID:     sessionID,
+		Phase:         PhaseWaitingForPlayers,
+		TurnNumber:    0,
+		CurrentPlayer: Player1,
 		Player1: &PlayerState{
 			UserID:         player1ID,
 			Username:       player1Name,
@@ -156,9 +158,9 @@ func (gs *GameState) GetPlayerView(playerID PlayerID) *PlayerView {
 		CurrentPlayer:  gs.CurrentPlayer,
 		SequenceNumber: playerSeqNum, // Per-player sequence
 
-		YourUserID:     yourState.UserID,
-		YourUsername:   yourState.Username,
-		YourGameData:   yourState.GameData, // Your custom game state
+		YourUserID:   yourState.UserID,
+		YourUsername: yourState.Username,
+		YourGameData: yourState.GameData, // Your custom game state
 
 		OpponentUserID:    opponentState.UserID,
 		OpponentUsername:  opponentState.Username,
@@ -172,12 +174,12 @@ func (gs *GameState) GetPlayerView(playerID PlayerID) *PlayerView {
 	return view
 }
 
-// ComputeHash computes the xxHash64 of this player view
+// ComputeHash computes the xxhash64 of this player view
 func (pv *PlayerView) ComputeHash() uint64 {
 	h := xxhash.New()
 
 	// Hash all fields in deterministic order
-	// Session and game metadata
+	// Session and game metadata3
 	h.Write([]byte(pv.SessionID))
 	h.Write([]byte(pv.Phase))
 	binary.Write(h, binary.LittleEndian, int32(pv.TurnNumber))
