@@ -8,6 +8,26 @@ import (
 	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
 )
 
+// HandCard represents a card in a player's deck/hand with colour info for draw validation.
+type HandCard struct {
+	CardID   int    `json:"card_id"`
+	CardName string `json:"card_name"`
+	Colour   string `json:"colour"`
+	Rarity   string `json:"rarity"`
+	ManaCost int    `json:"mana_cost"`
+	Attack   int    `json:"attack"`
+	HP       int    `json:"hp"`
+}
+
+// PlayerHand tracks the draw state for a single player.
+type PlayerHand struct {
+	Deck          []HandCard `json:"deck"`           // full deck (12 cards, set at game start)
+	Remaining     []HandCard `json:"remaining"`      // cards not yet drawn
+	Offered       []HandCard `json:"offered"`         // 5 cards offered this pre-turn (subset of remaining)
+	Hand          []HandCard `json:"hand"`            // cards the player has picked (persists across turns)
+	DrawnCardIDs  map[int]bool `json:"-"`             // card IDs already drawn in previous turns
+}
+
 type GameplayState struct {
 	SessionID     string
 	Player1Health int
@@ -17,6 +37,8 @@ type GameplayState struct {
 	ElixerPlayer2 int
 	BoardPlayer2  *[2][3]handlers.Card
 	RoundNumber   int
+	Player1Hand   *PlayerHand
+	Player2Hand   *PlayerHand
 }
 
 // GameplayManager manages gameplay state. All methods are called from the
@@ -33,17 +55,125 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 	return &GameplayManager{
 		game: &GameplayState{
 			SessionID:     sessionID,
-			Player1Health: 100,
-			Player2Health: 100,
-			ElixerPlayer1: 0,
+			Player1Health: 250,
+			Player2Health: 250,
+			ElixerPlayer1: 3,
 			BoardPlayer1:  &boardPlayer1,
-			ElixerPlayer2: 0,
+			ElixerPlayer2: 3,
 			BoardPlayer2:  &boardPlayer2,
 			RoundNumber:   1,
+			Player1Hand:   &PlayerHand{DrawnCardIDs: make(map[int]bool)},
+			Player2Hand:   &PlayerHand{DrawnCardIDs: make(map[int]bool)},
 		},
 		player1ID: player1ID,
 		player2ID: player2ID,
 	}
+}
+
+// SetPlayerDeck sets the deck for a player (called at game start after loading from DB).
+func (gh *GameplayManager) SetPlayerDeck(playerID int64, deck []HandCard) {
+	hand := gh.getPlayerHand(playerID)
+	hand.Deck = deck
+	hand.Remaining = make([]HandCard, len(deck))
+	copy(hand.Remaining, deck)
+}
+
+// OfferCards picks 5 random cards from the player's remaining pool for the pre-turn phase.
+func (gh *GameplayManager) OfferCards(playerID int64) []HandCard {
+	hand := gh.getPlayerHand(playerID)
+
+	// Filter out already-drawn cards from remaining
+	var available []HandCard
+	for _, c := range hand.Remaining {
+		if !hand.DrawnCardIDs[c.CardID] {
+			available = append(available, c)
+		}
+	}
+
+	// Shuffle and pick up to 5
+	shuffled := make([]HandCard, len(available))
+	copy(shuffled, available)
+	for i := len(shuffled) - 1; i > 0; i-- {
+		j := int(time.Now().UnixNano()) % (i + 1)
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	}
+
+	offerCount := 5
+	if len(shuffled) < offerCount {
+		offerCount = len(shuffled)
+	}
+	hand.Offered = shuffled[:offerCount]
+	return hand.Offered
+}
+
+// SelectCards validates and adds selected cards to the player's hand.
+// Rules:
+//   - up to 4 cards from the offered set
+//   - all selected cards must be the same colour (colourless doesn't count as a colour)
+//   - cannot re-take cards already in hand from previous turns
+func (gh *GameplayManager) SelectCards(playerID int64, selectedIDs []int) error {
+	hand := gh.getPlayerHand(playerID)
+
+	if len(selectedIDs) > 4 {
+		return fmt.Errorf("can only select up to 4 cards")
+	}
+	if len(selectedIDs) == 0 {
+		return nil // selecting nothing is valid
+	}
+
+	// Build a lookup of offered cards
+	offeredMap := make(map[int]HandCard)
+	for _, c := range hand.Offered {
+		offeredMap[c.CardID] = c
+	}
+
+	// Validate all selected cards are in the offered set and not already drawn
+	var selected []HandCard
+	for _, id := range selectedIDs {
+		card, ok := offeredMap[id]
+		if !ok {
+			return fmt.Errorf("card %d was not offered", id)
+		}
+		if hand.DrawnCardIDs[id] {
+			return fmt.Errorf("card %d was already drawn in a previous turn", id)
+		}
+		selected = append(selected, card)
+	}
+
+	// Validate colour constraint: all non-colourless cards must be the same colour
+	var requiredColour string
+	for _, c := range selected {
+		if c.Colour == "Grey" || c.Colour == "Colourless" {
+			continue // colourless doesn't count
+		}
+		if requiredColour == "" {
+			requiredColour = c.Colour
+		} else if c.Colour != requiredColour {
+			return fmt.Errorf("can only select 1 colour type per turn (got %s and %s)", requiredColour, c.Colour)
+		}
+	}
+
+	// Add to hand and mark as drawn
+	for _, c := range selected {
+		hand.Hand = append(hand.Hand, c)
+		hand.DrawnCardIDs[c.CardID] = true
+	}
+
+	// Clear offered
+	hand.Offered = nil
+	return nil
+}
+
+// GetPlayerHand returns the hand state for a player.
+func (gh *GameplayManager) GetPlayerHandState(playerID int64) *PlayerHand {
+	return gh.getPlayerHand(playerID)
+}
+
+func (gh *GameplayManager) getPlayerHand(playerID int64) *PlayerHand {
+	if playerID == gh.player1ID {
+		return gh.game.Player1Hand
+	}
+	return gh.game.Player2Hand
 }
 
 // TickElixir increments elixir for both players. Called by the game loop every ElixirEvery ticks.

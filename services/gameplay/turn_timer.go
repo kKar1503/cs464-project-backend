@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	// TurnTimeout is how long a player has to take their turn
-	TurnTimeout = 90 * time.Second
+	// TurnTimeout is how long a player has to take their turn (30s per spec)
+	TurnTimeout = 30 * time.Second
 )
 
 // TurnTimer manages turn timeouts for a game session

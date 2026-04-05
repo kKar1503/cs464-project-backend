@@ -30,6 +30,7 @@ type GamePhase string
 const (
 	PhaseWaitingForPlayers GamePhase = "WAITING_FOR_PLAYERS"
 	PhaseInitializing      GamePhase = "INITIALIZING"
+	PhasePreTurn           GamePhase = "PRE_TURN"
 	PhasePlayer1Turn       GamePhase = "PLAYER1_TURN"
 	PhasePlayer2Turn       GamePhase = "PLAYER2_TURN"
 	PhaseGameOver          GamePhase = "GAME_OVER"

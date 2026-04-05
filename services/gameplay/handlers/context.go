@@ -281,13 +281,28 @@ type Card struct {
 	OnDefend OnDefend
 }
 
+// HandCardInfo represents a card in a player's hand/deck for the draw phase.
+type HandCardInfo struct {
+	CardID   int    `json:"card_id"`
+	CardName string `json:"card_name"`
+	Colour   string `json:"colour"`
+	Rarity   string `json:"rarity"`
+	ManaCost int    `json:"mana_cost"`
+	Attack   int    `json:"attack"`
+	HP       int    `json:"hp"`
+}
+
 type GameplayManager interface {
 	GetElixer(playerID int64) int
 	RemoveElixer(playerID int64, amount int)
 	GetPlayer1ID() int64
 	GetBoard(playerID int64) (yours *[2][3]Card, opponents *[2][3]Card)
 	GetPlayerHealth(playerID int64) (you *int, opponent *int)
-	// First board is the player's, the second is the opponent's
 	PlaceCard(playerID int64, card *Card, xPos int, yPos int) error
 	AttackCard(playerID int64, xPos int, yPos int) error
+
+	// Hand drawing
+	OfferCards(playerID int64) []HandCardInfo
+	SelectCards(playerID int64, selectedIDs []int) error
+	GetHand(playerID int64) []HandCardInfo
 }

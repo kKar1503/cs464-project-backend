@@ -218,6 +218,34 @@ func (gpa *GameplayAdapter) GetPlayer1ID() int64 {
 	return gpa.gameplay.player1ID
 }
 
+func (gpa *GameplayAdapter) OfferCards(playerID int64) []handlers.HandCardInfo {
+	cards := gpa.gameplay.OfferCards(playerID)
+	result := make([]handlers.HandCardInfo, len(cards))
+	for i, c := range cards {
+		result[i] = handlers.HandCardInfo{
+			CardID: c.CardID, CardName: c.CardName, Colour: c.Colour,
+			Rarity: c.Rarity, ManaCost: c.ManaCost, Attack: c.Attack, HP: c.HP,
+		}
+	}
+	return result
+}
+
+func (gpa *GameplayAdapter) SelectCards(playerID int64, selectedIDs []int) error {
+	return gpa.gameplay.SelectCards(playerID, selectedIDs)
+}
+
+func (gpa *GameplayAdapter) GetHand(playerID int64) []handlers.HandCardInfo {
+	hand := gpa.gameplay.GetPlayerHandState(playerID)
+	result := make([]handlers.HandCardInfo, len(hand.Hand))
+	for i, c := range hand.Hand {
+		result[i] = handlers.HandCardInfo{
+			CardID: c.CardID, CardName: c.CardName, Colour: c.Colour,
+			Rarity: c.Rarity, ManaCost: c.ManaCost, Attack: c.Attack, HP: c.HP,
+		}
+	}
+	return result
+}
+
 func (gpa *GameplayAdapter) GetBoard(playerID int64) (yours *[2][3]handlers.Card, opponents *[2][3]handlers.Card) {
 	if playerID == gpa.gameplay.player1ID {
 		return gpa.gameplay.game.BoardPlayer1, gpa.gameplay.game.BoardPlayer2
