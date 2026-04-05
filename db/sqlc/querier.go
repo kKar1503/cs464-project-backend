@@ -42,6 +42,7 @@ type Querier interface {
 	GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlayerCardsRow, error)
 	GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCardsNotInDeckParams) ([]GetPlayerCardsNotInDeckRow, error)
 	GetPlayerDeckList(ctx context.Context, playerID int64) ([]GetPlayerDeckListRow, error)
+	GetPlayerMMR(ctx context.Context, id int64) (int32, error)
 	GetPlayerPacks(ctx context.Context, playerID int64) ([]GetPlayerPacksRow, error)
 	GetQueueEntryByUserID(ctx context.Context, userID int64) (int64, error)
 	GetQueueStatus(ctx context.Context, userID int64) (GetQueueStatusRow, error)
@@ -67,9 +68,11 @@ type Querier interface {
 	StartGameSession(ctx context.Context, arg StartGameSessionParams) (sql.Result, error)
 	UnbanUser(ctx context.Context, id int64) error
 	UpdateDeck(ctx context.Context, arg UpdateDeckParams) (sql.Result, error)
+	UpdateDeckIsActive(ctx context.Context, arg UpdateDeckIsActiveParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) error
 	UpdateUserMMR(ctx context.Context, arg UpdateUserMMRParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	SetPlayerCardQuantity(ctx context.Context, arg SetPlayerCardQuantityParams) error
 	UpsertPlayerCard(ctx context.Context, arg UpsertPlayerCardParams) error
 	ValidateSession(ctx context.Context, token string) (ValidateSessionRow, error)
 }

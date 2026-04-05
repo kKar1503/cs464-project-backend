@@ -5,7 +5,7 @@ INSERT INTO decks (player_id, name) VALUES (?, ?);
 INSERT INTO deck_cards (deck_id, card_id, position) VALUES (?, ?, ?);
 
 -- name: GetDeckByIDAndPlayer :one
-SELECT name, created_at FROM decks WHERE deck_id = ? AND player_id = ?;
+SELECT deck_id, name, is_active, created_at FROM decks WHERE deck_id = ? AND player_id = ?;
 
 -- name: GetDeckCards :many
 SELECT card_id, position FROM deck_cards WHERE deck_id = ? ORDER BY position;
@@ -44,17 +44,23 @@ WHERE pc.player_id = ?
 ORDER BY c.rarity DESC, c.card_id ASC;
 
 -- name: GetPlayerDeckList :many
-SELECT deck_id, name FROM decks WHERE player_id = ? ORDER BY deck_id ASC;
+SELECT deck_id, name, is_active, created_at FROM decks WHERE player_id = ? ORDER BY deck_id ASC;
 
 -- name: GetPlayerCardsNotInDeck :many
 SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
-       c.description, c.icon_url, pc.level, pc.quantity
+       c.description, c.icon_url, pc.level,
+       pc.quantity - COALESCE(in_deck.cnt, 0) AS quantity,
+       pc.is_in_deck
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
+LEFT JOIN (
+    SELECT card_id, COUNT(*) AS cnt
+    FROM deck_cards
+    WHERE deck_id = ?
+    GROUP BY card_id
+) in_deck ON in_deck.card_id = pc.card_id
 WHERE pc.player_id = ?
-  AND pc.card_id NOT IN (
-      SELECT dc.card_id FROM deck_cards dc WHERE dc.deck_id = ?
-  )
+  AND pc.quantity > COALESCE(in_deck.cnt, 0)
 ORDER BY c.rarity DESC, c.card_id ASC;
 
 -- name: GetPlayerPacks :many
@@ -70,6 +76,13 @@ UPDATE card_packs SET is_opened = TRUE, opened_at = NOW() WHERE pack_id = ?;
 -- name: UpsertPlayerCard :exec
 INSERT INTO player_cards (player_id, card_id, level, quantity) VALUES (?, ?, 1, 1)
 ON DUPLICATE KEY UPDATE quantity = quantity + 1;
+
+-- name: UpdateDeckIsActive :exec
+UPDATE decks SET is_active = ? WHERE deck_id = ? AND player_id = ?;
+
+-- name: SetPlayerCardQuantity :exec
+INSERT INTO player_cards (player_id, card_id, level, quantity) VALUES (?, ?, 1, ?)
+ON DUPLICATE KEY UPDATE quantity = VALUES(quantity);
 
 -- name: GetRandomCardsByRarity :many
 SELECT card_id, card_name, rarity FROM cards WHERE rarity = ? ORDER BY RAND() LIMIT ?;

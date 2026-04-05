@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
+	github.com/kKar1503/cs464-backend/db v0.0.0
 	github.com/redis/go-redis/v9 v9.18.0
 	golang.org/x/crypto v0.48.0
 )
@@ -14,3 +15,5 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 )
+
+replace github.com/kKar1503/cs464-backend/db => ../../db
