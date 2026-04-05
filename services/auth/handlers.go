@@ -35,7 +35,6 @@ func giveStarterContent(ctx context.Context, userID int64) {
 	for i := 1; i <= 3; i++ {
 		result, err := queries.CreateDeck(ctx, db.CreateDeckParams{
 			PlayerID: userID,
-			CardID:   1,
 			Name:     fmt.Sprintf("Starter Deck %d", i),
 		})
 		if err != nil {

@@ -464,7 +464,7 @@ func handleUpdateAllDecks(w http.ResponseWriter, r *http.Request) {
 			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "deck_id is required for each deck"})
 			return
 		}
-		if err := validateDeckCards(ctx, d.CardIDs); err != nil {
+		if err := validateDeckCards(ctx, userID, d.CardIDs); err != nil {
 			respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
@@ -485,7 +485,6 @@ func handleUpdateAllDecks(w http.ResponseWriter, r *http.Request) {
 
 		if _, err := queries.UpdateDeck(ctx, db.UpdateDeckParams{
 			Name:     d.Name,
-			CardID:   int32(d.CardIDs[0]),
 			DeckID:   int32(d.DeckID),
 			PlayerID: userID,
 		}); err != nil {
