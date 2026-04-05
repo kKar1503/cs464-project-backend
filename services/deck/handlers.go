@@ -127,10 +127,6 @@ func validateDeckCards(ctx context.Context, cardIDs []int64) error {
 
 
 func handleCreateDeck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
-		return
-	}
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {
@@ -202,10 +198,6 @@ func handleCreateDeck(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetDeck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
-		return
-	}
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {
@@ -267,11 +259,6 @@ func handleGetDeck(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		methodNotAllowed(w)
-		return
-	}
-
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {
@@ -337,10 +324,6 @@ func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDeleteDeck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		methodNotAllowed(w)
-		return
-	}
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {
@@ -381,11 +364,6 @@ func handleDeleteDeck(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"message": "deck deleted"})
 }
 
-func methodNotAllowed(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusMethodNotAllowed)
-	w.Write([]byte(`{"error":"method not allowed"}`))
-}
 
 type CardResponse struct {
 	CardID      int    `json:"card_id"`
@@ -399,11 +377,6 @@ type CardResponse struct {
 }
 
 func handleGetAllCards(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
-		return
-	}
-
 	ctx := r.Context()
 	rarity := r.URL.Query().Get("rarity")
 	affiliation := r.URL.Query().Get("affiliation")
@@ -466,10 +439,6 @@ type PlayerCardResponse struct {
 }
 
 func handleGetPlayerCards(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
-		return
-	}
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {
@@ -513,10 +482,6 @@ type DeckCardsNotInDeck struct {
 }
 
 func handleGetCardsNotInDecks(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
-		return
-	}
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {

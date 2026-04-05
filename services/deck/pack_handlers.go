@@ -30,10 +30,6 @@ type PackCard struct {
 }
 
 func handleGetPacks(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
-		return
-	}
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {
@@ -64,10 +60,6 @@ func handleGetPacks(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleOpenPack(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
-		return
-	}
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {
@@ -250,10 +242,6 @@ func GivePackToPlayer(ctx context.Context, playerID int64) (int64, string, error
 }
 
 func handleBuyPack(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
-		return
-	}
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {

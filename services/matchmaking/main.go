@@ -73,17 +73,17 @@ func main() {
 	// Set up HTTP routes
 	mux := http.NewServeMux()
 	// Protected endpoints (require user authentication)
-	mux.HandleFunc("/matchmaking/join", requireAuth(handleJoinQueue))
-	mux.HandleFunc("/matchmaking/leave", requireAuth(handleLeaveQueue))
-	mux.HandleFunc("/matchmaking/status", requireAuth(handleQueueStatus))
-	mux.HandleFunc("/matchmaking/match", requireAuth(handleCheckMatch))
-	mux.HandleFunc("/matchmaking/accept", requireAuth(handleAcceptMatch))
-	mux.HandleFunc("/matchmaking/reject", requireAuth(handleRejectMatch))
-	mux.HandleFunc("/matchmaking/session/status", requireAuth(handleGetSessionStatus))
+	mux.HandleFunc("POST /matchmaking/queue", requireAuth(handleJoinQueue))
+	mux.HandleFunc("DELETE /matchmaking/queue", requireAuth(handleLeaveQueue))
+	mux.HandleFunc("GET /matchmaking/queue", requireAuth(handleQueueStatus))
+	mux.HandleFunc("GET /matchmaking/match", requireAuth(handleCheckMatch))
+	mux.HandleFunc("POST /matchmaking/match/accept", requireAuth(handleAcceptMatch))
+	mux.HandleFunc("POST /matchmaking/match/reject", requireAuth(handleRejectMatch))
+	mux.HandleFunc("GET /matchmaking/sessions", requireAuth(handleGetSessionStatus))
 	// Internal service endpoints (require internal authentication)
-	mux.HandleFunc("/matchmaking/session/end", requireInternalAuth(handleEndGame))
+	mux.HandleFunc("POST /matchmaking/sessions/end", requireInternalAuth(handleEndGame))
 	// Public endpoints
-	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("GET /health", handleHealth)
 
 	// Get port from environment
 	port := os.Getenv("SERVICE_PORT")

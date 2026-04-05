@@ -82,9 +82,9 @@ func main() {
 
 	// Set up HTTP routes
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", handleHealth)
-	mux.HandleFunc("/ws", handleWebSocket)
-	mux.HandleFunc("/game/stats", handleGameStats)
+	mux.HandleFunc("GET /health", handleHealth)
+	mux.HandleFunc("GET /ws", handleWebSocket)
+	mux.HandleFunc("GET /game/stats", handleGameStats)
 
 	// Get port from environment
 	port := os.Getenv("SERVICE_PORT")

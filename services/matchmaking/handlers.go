@@ -61,10 +61,7 @@ type QueueEntry struct {
 
 // handleJoinQueue adds a player to the matchmaking queue
 func handleJoinQueue(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	// Get authenticated user from context
 	authUser, err := getAuthenticatedUser(r)
@@ -142,10 +139,7 @@ func handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 
 // handleLeaveQueue removes a player from the matchmaking queue
 func handleLeaveQueue(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	// Get authenticated user from context
 	authUser, err := getAuthenticatedUser(r)
@@ -182,10 +176,7 @@ func handleLeaveQueue(w http.ResponseWriter, r *http.Request) {
 
 // handleQueueStatus checks if a player is in queue and their status
 func handleQueueStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	// Get authenticated user from context
 	authUser, err := getAuthenticatedUser(r)
@@ -330,10 +321,7 @@ func createGameSession(player1, player2 QueueEntry) (string, error) {
 
 // handleAcceptMatch marks a player as accepting the match and starts the game if both players accept
 func handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	// Get authenticated user from context
 	authUser, err := getAuthenticatedUser(r)
@@ -442,10 +430,7 @@ func handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
 
 // handleRejectMatch handles when a player rejects the match, puts both players back in queue
 func handleRejectMatch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	// Get authenticated user from context
 	authUser, err := getAuthenticatedUser(r)
@@ -543,10 +528,7 @@ func handleRejectMatch(w http.ResponseWriter, r *http.Request) {
 
 // handleEndGame transitions a game session to 'completed' and updates MMR
 func handleEndGame(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	var req GameSessionUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -619,10 +601,7 @@ func handleEndGame(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSessionStatus returns the current status of a game session
 func handleGetSessionStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	sessionID := r.URL.Query().Get("session_id")
 	if sessionID == "" {

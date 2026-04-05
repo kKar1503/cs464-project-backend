@@ -68,10 +68,7 @@ type SessionData struct {
 
 // handleRegister creates a new user account
 func handleRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -124,10 +121,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 
 // handleLogin authenticates a user and creates a session
 func handleLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -223,10 +217,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 // handleLogout revokes the current session
 func handleLogout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	token := extractToken(r)
 	if token == "" {
@@ -252,10 +243,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 
 // handleValidate validates a session token (used by other services)
 func handleValidate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	token := extractToken(r)
 	if token == "" {
@@ -321,10 +309,7 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 
 // handleMe returns current user info
 func handleMe(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	token := extractToken(r)
 	if token == "" {
@@ -418,10 +403,7 @@ func respondError(w http.ResponseWriter, message string, statusCode int) {
 
 // handleBanUser bans a user and revokes all their sessions
 func handleBanUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	var req BanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -459,10 +441,7 @@ func handleBanUser(w http.ResponseWriter, r *http.Request) {
 
 // handleUnbanUser unbans a user
 func handleUnbanUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+
 
 	var req UnbanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

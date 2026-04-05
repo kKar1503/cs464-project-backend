@@ -64,14 +64,14 @@ func main() {
 
 	// Set up HTTP routes
 	mux := http.NewServeMux()
-	mux.HandleFunc("/auth/register", handleRegister)
-	mux.HandleFunc("/auth/login", handleLogin)
-	mux.HandleFunc("/auth/logout", handleLogout)
-	mux.HandleFunc("/auth/validate", handleValidate)
-	mux.HandleFunc("/auth/me", handleMe)
-	mux.HandleFunc("/auth/ban", handleBanUser)
-	mux.HandleFunc("/auth/unban", handleUnbanUser)
-	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("POST /auth/register", handleRegister)
+	mux.HandleFunc("POST /auth/login", handleLogin)
+	mux.HandleFunc("POST /auth/logout", handleLogout)
+	mux.HandleFunc("GET /auth/validate", handleValidate)
+	mux.HandleFunc("GET /auth/me", handleMe)
+	mux.HandleFunc("POST /auth/ban", handleBanUser)
+	mux.HandleFunc("POST /auth/unban", handleUnbanUser)
+	mux.HandleFunc("GET /health", handleHealth)
 
 	// Create server
 	port := os.Getenv("SERVICE_PORT")
