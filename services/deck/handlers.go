@@ -65,7 +65,6 @@ type UpdateDeckRequest struct {
     DeckID   int64   `json:"deck_id"`
     Name     string  `json:"name"`
     CardIDs  []int64 `json:"card_ids"`
-    IsActive *bool   `json:"is_active"`
 }
 type DeckCard struct {
     CardID   int64 `json:"card_id"`
@@ -74,7 +73,6 @@ type DeckCard struct {
 type DeckResponse struct {
     DeckID    int64      `json:"deck_id"`
     Name      string     `json:"name"`
-    IsActive  bool       `json:"is_active"`
     CardIDs   []int64    `json:"card_ids"`
     Cards     []DeckCard `json:"cards"`
     CreatedAt string     `json:"created_at"`
@@ -210,40 +208,10 @@ func handleCreateDeck(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusCreated, DeckResponse{
 		DeckID:    deckID,
 		Name:      req.Name,
-		IsActive:  true,
 		CardIDs:   req.CardIDs,
 		Cards:     []DeckCard{},
 		CreatedAt: time.Now().Format(time.RFC3339),
 	})
-}
-
-func handleListDecks(w http.ResponseWriter, r *http.Request) {
-	userID, err := getUserFromToken(r)
-	if err != nil {
-		if err == errUnauthorized {
-			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-			return
-		}
-		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
-		return
-	}
-
-	decks, err := queries.GetPlayerDeckList(r.Context(), userID)
-	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get decks"})
-		return
-	}
-
-	type DeckListItem struct {
-		DeckID int64  `json:"deck_id"`
-		Name   string `json:"name"`
-	}
-	result := make([]DeckListItem, 0, len(decks))
-	for _, d := range decks {
-		result = append(result, DeckListItem{DeckID: int64(d.DeckID), Name: d.Name})
-	}
-
-	respondJSON(w, http.StatusOK, map[string]interface{}{"decks": result, "count": len(result)})
 }
 
 func handleGetDeckByID(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +267,6 @@ func handleGetDeckByID(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, DeckResponse{
 		DeckID:    int64(deck.DeckID),
 		Name:      deck.Name,
-		IsActive:  deck.IsActive,
 		CardIDs:   cardIDs,
 		Cards:     cards,
 		CreatedAt: deck.CreatedAt.Format(time.RFC3339),
@@ -372,23 +339,9 @@ func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	newIsActive := existing.IsActive
-	if req.IsActive != nil {
-		newIsActive = *req.IsActive
-		if err := queries.UpdateDeckIsActive(ctx, db.UpdateDeckIsActiveParams{
-			IsActive: newIsActive,
-			DeckID:   int32(req.DeckID),
-			PlayerID: userID,
-		}); err != nil {
-			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update deck active status"})
-			return
-		}
-	}
-
 	respondJSON(w, http.StatusOK, DeckResponse{
-		DeckID:    req.DeckID,
+		DeckID:    deckID,
 		Name:      req.Name,
-		IsActive:  newIsActive,
 		CardIDs:   req.CardIDs,
 		Cards:     []DeckCard{},
 		CreatedAt: existing.CreatedAt.Format(time.RFC3339),
@@ -501,19 +454,6 @@ func handleUpdateAllDecks(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		newIsActive := existing.IsActive
-		if d.IsActive != nil {
-			newIsActive = *d.IsActive
-			if err := queries.UpdateDeckIsActive(ctx, db.UpdateDeckIsActiveParams{
-				IsActive: newIsActive,
-				DeckID:   int32(d.DeckID),
-				PlayerID: userID,
-			}); err != nil {
-				respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update deck active status"})
-				return
-			}
-		}
-
 		cards := make([]DeckCard, 0, len(d.CardIDs))
 		cardIDs := make([]int64, 0, len(d.CardIDs))
 		for i, id := range d.CardIDs {
@@ -524,7 +464,6 @@ func handleUpdateAllDecks(w http.ResponseWriter, r *http.Request) {
 		updated = append(updated, DeckResponse{
 			DeckID:    d.DeckID,
 			Name:      d.Name,
-			IsActive:  newIsActive,
 			CardIDs:   cardIDs,
 			Cards:     cards,
 			CreatedAt: existing.CreatedAt.Format(time.RFC3339),
@@ -571,7 +510,6 @@ func handleGetAllDecks(w http.ResponseWriter, r *http.Request) {
 		decks = append(decks, DeckResponse{
 			DeckID:    int64(d.DeckID),
 			Name:      d.Name,
-			IsActive:  d.IsActive,
 			CardIDs:   cardIDs,
 			Cards:     cards,
 			CreatedAt: d.CreatedAt.Format(time.RFC3339),

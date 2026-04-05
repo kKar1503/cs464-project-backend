@@ -5,7 +5,7 @@ INSERT INTO decks (player_id, name) VALUES (?, ?);
 INSERT INTO deck_cards (deck_id, card_id, position) VALUES (?, ?, ?);
 
 -- name: GetDeckByIDAndPlayer :one
-SELECT deck_id, name, is_active, created_at FROM decks WHERE deck_id = ? AND player_id = ?;
+SELECT deck_id, name, created_at FROM decks WHERE deck_id = ? AND player_id = ?;
 
 -- name: GetDeckCards :many
 SELECT card_id, position FROM deck_cards WHERE deck_id = ? ORDER BY position;
@@ -44,13 +44,12 @@ WHERE pc.player_id = ?
 ORDER BY c.rarity DESC, c.card_id ASC;
 
 -- name: GetPlayerDeckList :many
-SELECT deck_id, name, is_active, created_at FROM decks WHERE player_id = ? ORDER BY deck_id ASC;
+SELECT deck_id, name, created_at FROM decks WHERE player_id = ? ORDER BY deck_id ASC;
 
 -- name: GetPlayerCardsNotInDeck :many
 SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
        c.description, c.icon_url, pc.level,
-       pc.quantity - COALESCE(in_deck.cnt, 0) AS quantity,
-       pc.is_in_deck
+       pc.quantity - COALESCE(in_deck.cnt, 0) AS quantity
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
 LEFT JOIN (
@@ -76,9 +75,6 @@ UPDATE card_packs SET is_opened = TRUE, opened_at = NOW() WHERE pack_id = ?;
 -- name: UpsertPlayerCard :exec
 INSERT INTO player_cards (player_id, card_id, level, quantity) VALUES (?, ?, 1, 1)
 ON DUPLICATE KEY UPDATE quantity = quantity + 1;
-
--- name: UpdateDeckIsActive :exec
-UPDATE decks SET is_active = ? WHERE deck_id = ? AND player_id = ?;
 
 -- name: SetPlayerCardQuantity :exec
 INSERT INTO player_cards (player_id, card_id, level, quantity) VALUES (?, ?, 1, ?)

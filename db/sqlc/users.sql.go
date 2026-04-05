@@ -11,17 +11,6 @@ import (
 	"time"
 )
 
-const getPlayerMMR = `-- name: GetPlayerMMR :one
-SELECT mmr FROM users WHERE id = ?
-`
-
-func (q *Queries) GetPlayerMMR(ctx context.Context, id int64) (int32, error) {
-	row := q.db.QueryRowContext(ctx, getPlayerMMR, id)
-	var mmr int32
-	err := row.Scan(&mmr)
-	return mmr, err
-}
-
 const countUsers = `-- name: CountUsers :one
 SELECT COUNT(*) FROM users
 `
@@ -55,6 +44,17 @@ WHERE id = ?
 func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteUser, id)
 	return err
+}
+
+const getPlayerMMR = `-- name: GetPlayerMMR :one
+SELECT mmr FROM users WHERE id = ?
+`
+
+func (q *Queries) GetPlayerMMR(ctx context.Context, id int64) (int32, error) {
+	row := q.db.QueryRowContext(ctx, getPlayerMMR, id)
+	var mmr int32
+	err := row.Scan(&mmr)
+	return mmr, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
