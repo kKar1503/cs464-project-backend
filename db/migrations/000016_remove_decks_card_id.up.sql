@@ -1,0 +1,2 @@
+ALTER TABLE decks DROP FOREIGN KEY decks_ibfk_2;
+ALTER TABLE decks DROP COLUMN card_id;
