@@ -3,34 +3,19 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"time"
 
 	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
 )
 
 // Server-initiated actions that don't come from client
 const (
-	ServerActionTurnEnd            GameAction = "TURN_END"
+	ServerActionRoundEnd           GameAction = "ROUND_END"
 	ServerActionOpponentDisconnect GameAction = "OPPONENT_DISCONNECT"
 	ServerActionOpponentReconnect  GameAction = "OPPONENT_RECONNECT"
 	ServerActionGameStart          GameAction = "GAME_START"
 	ServerActionGameEnd            GameAction = "GAME_END"
-	ServerActionTurnStart          GameAction = "TURN_START"
+	ServerActionRoundStart         GameAction = "ROUND_START"
 )
-
-// TurnEndReason represents why a turn ended
-type TurnEndReason string
-
-const (
-	TurnEndReasonPlayerInitiated TurnEndReason = "player_initiated"
-	TurnEndReasonTimedOut        TurnEndReason = "timed_out"
-)
-
-// TurnEndParams contains information about turn end
-type TurnEndParams struct {
-	Reason   TurnEndReason `json:"reason"`    // "player_initiated" or "timed_out"
-	PlayerID PlayerID      `json:"player_id"` // Which player's turn ended
-}
 
 // ServerActionContext wraps a game session for server-initiated actions
 type ServerActionContext struct {
@@ -103,8 +88,6 @@ func (ctx *ServerActionContext) executeActionWithoutConnection(action GameAction
 // executeDefaultServerAction handles server actions that don't have custom handlers
 func (ctx *ServerActionContext) executeDefaultServerAction(action GameAction, params json.RawMessage) error {
 	switch action {
-	case ServerActionTurnEnd:
-		return ctx.handleTurnEnd(params)
 	case ServerActionOpponentDisconnect:
 		return ctx.handleOpponentDisconnect()
 	case ServerActionOpponentReconnect:
@@ -113,36 +96,10 @@ func (ctx *ServerActionContext) executeDefaultServerAction(action GameAction, pa
 		return ctx.handleGameStart()
 	case ServerActionGameEnd:
 		return ctx.handleGameEnd(params)
-	case ServerActionTurnStart:
-		return ctx.handleTurnStart()
 	default:
 		log.Printf("Unknown server action: %s", action)
 		return nil
 	}
-}
-
-// handleTurnEnd handles turn ending (from player action or timeout)
-func (ctx *ServerActionContext) handleTurnEnd(params json.RawMessage) error {
-	var turnEndParams TurnEndParams
-	if err := json.Unmarshal(params, &turnEndParams); err != nil {
-		return err
-	}
-
-	state := ctx.Session.State
-
-	// Switch turns (no mutex needed — called from game loop)
-	if turnEndParams.PlayerID == Player1 {
-		state.Phase = PhasePlayer2Turn
-	} else {
-		state.Phase = PhasePlayer1Turn
-		state.TurnNumber++
-	}
-
-	state.LastUpdateAt = time.Now()
-
-	log.Printf("Player %d turn ended in session %s (reason: %s)",
-		turnEndParams.PlayerID, ctx.Session.State.SessionID, turnEndParams.Reason)
-	return nil
 }
 
 // handleOpponentDisconnect notifies player that opponent disconnected
@@ -161,7 +118,7 @@ func (ctx *ServerActionContext) handleOpponentReconnect() error {
 func (ctx *ServerActionContext) handleGameStart() error {
 	state := ctx.Session.State
 
-	state.Phase = PhasePlayer1Turn
+	state.Phase = PhaseActive
 	state.TurnNumber = 1
 
 	// TODO: Initialize decks, shuffle, deal starting hands
@@ -190,12 +147,6 @@ func (ctx *ServerActionContext) handleGameEnd(params json.RawMessage) error {
 
 	log.Printf("Game ended in session %s, winner: Player %d, reason: %s",
 		ctx.Session.State.SessionID, endParams.WinnerID, endParams.Reason)
-	return nil
-}
-
-// handleTurnStart notifies player their turn has started
-func (ctx *ServerActionContext) handleTurnStart() error {
-	// Just broadcast state update
 	return nil
 }
 

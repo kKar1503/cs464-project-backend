@@ -16,7 +16,6 @@ type GameAction string
 const (
 	ActionJoinGame   GameAction = "JOIN_GAME"
 	ActionClick      GameAction = "CLICK"
-	ActionEndTurn    GameAction = "END_TURN"
 	ActionSurrender  GameAction = "SURRENDER"
 	ActionDisconnect GameAction = "DISCONNECT"
 	ActionReconnect  GameAction = "RECONNECT"
@@ -30,10 +29,9 @@ type GamePhase string
 const (
 	PhaseWaitingForPlayers GamePhase = "WAITING_FOR_PLAYERS"
 	PhaseInitializing      GamePhase = "INITIALIZING"
-	PhasePreTurn           GamePhase = "PRE_TURN"
-	PhasePlayer1Turn       GamePhase = "PLAYER1_TURN"
-	PhasePlayer2Turn       GamePhase = "PLAYER2_TURN"
-	PhaseGameOver          GamePhase = "GAME_OVER"
+	PhasePreTurn  GamePhase = "PRE_TURN" // draw phase — both players pick cards
+	PhaseActive   GamePhase = "ACTIVE"   // both players act simultaneously
+	PhaseGameOver GamePhase = "GAME_OVER"
 )
 
 // PlayerID represents which player (1 or 2)

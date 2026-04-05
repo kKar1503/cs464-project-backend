@@ -20,7 +20,7 @@ type GameSession struct {
 	SnapshotManager *SnapshotManager
 	Player1Conn     *PlayerConnection
 	Player2Conn     *PlayerConnection
-	TurnTimer       *TurnTimer
+	RoundTimer      *RoundTimer
 	GameLoop        *GameLoop
 	CreatedAt       time.Time
 	LastActivityAt  time.Time
@@ -38,7 +38,7 @@ func NewGameSession(sessionID string, player1ID, player2ID int64, player1Name, p
 		GameplayManager: NewGameplayManager(sessionID, player1ID, player2ID),
 		LastActivityAt:  now,
 	}
-	session.TurnTimer = NewTurnTimer(session)
+	session.RoundTimer = NewRoundTimer(session)
 	session.GameLoop = NewGameLoop(session)
 	go session.GameLoop.Run()
 	return session
