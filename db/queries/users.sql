@@ -32,5 +32,8 @@ WHERE id = ?;
 DELETE FROM users
 WHERE id = ?;
 
+-- name: GetPlayerMMR :one
+SELECT mmr FROM users WHERE id = ?;
+
 -- name: CountUsers :one
 SELECT COUNT(*) FROM users;

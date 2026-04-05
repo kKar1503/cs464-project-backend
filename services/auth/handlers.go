@@ -16,6 +16,45 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var starterCardIDs = []int32{1, 2, 3, 4, 5, 6}
+
+// giveStarterContent gives a new user 2 copies each of cards 1-6
+// and creates 3 identical starter decks containing all 12 cards.
+func giveStarterContent(ctx context.Context, userID int64) {
+	for _, cardID := range starterCardIDs {
+		if err := queries.SetPlayerCardQuantity(ctx, db.SetPlayerCardQuantityParams{
+			PlayerID: userID,
+			CardID:   cardID,
+			Quantity: 2,
+		}); err != nil {
+			log.Printf("Failed to give starter card %d to user %d: %v", cardID, userID, err)
+		}
+	}
+
+	deckCards := []int32{1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6}
+	for i := 1; i <= 3; i++ {
+		result, err := queries.CreateDeck(ctx, db.CreateDeckParams{
+			PlayerID: userID,
+			CardID:   1,
+			Name:     fmt.Sprintf("Starter Deck %d", i),
+		})
+		if err != nil {
+			log.Printf("Failed to create starter deck %d for user %d: %v", i, userID, err)
+			continue
+		}
+		deckID, _ := result.LastInsertId()
+		for pos, cardID := range deckCards {
+			if err := queries.InsertDeckCard(ctx, db.InsertDeckCardParams{
+				DeckID:   int32(deckID),
+				CardID:   cardID,
+				Position: int32(pos),
+			}); err != nil {
+				log.Printf("Failed to insert card %d into starter deck %d: %v", cardID, deckID, err)
+			}
+		}
+	}
+}
+
 const (
 	sessionTTL    = 24 * time.Hour
 	tokenLength   = 32
@@ -111,6 +150,8 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID, _ := result.LastInsertId()
+
+	go giveStarterContent(context.Background(), userID)
 
 	respondJSON(w, map[string]any{
 		"user_id":  userID,
@@ -336,6 +377,42 @@ func handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondError(w, "Unauthorized", http.StatusUnauthorized)
+}
+
+// handleGetMyMMR returns the current user's MMR
+func handleGetMyMMR(w http.ResponseWriter, r *http.Request) {
+	token := extractToken(r)
+	if token == "" {
+		respondError(w, "Missing authorization token", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := context.Background()
+	redisKey := fmt.Sprintf(sessionKeyFmt, token)
+
+	sessionJSON, err := redisClient.Get(ctx, redisKey).Result()
+	if err != nil {
+		respondError(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var sessionData SessionData
+	if err := json.Unmarshal([]byte(sessionJSON), &sessionData); err != nil || time.Now().Unix() >= sessionData.ExpiresAt {
+		respondError(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	mmr, err := queries.GetPlayerMMR(ctx, sessionData.UserID)
+	if err != nil {
+		respondError(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, map[string]any{
+		"user_id":  sessionData.UserID,
+		"username": sessionData.Username,
+		"mmr":      mmr,
+	}, http.StatusOK)
 }
 
 // Helper functions

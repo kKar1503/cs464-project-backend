@@ -5,6 +5,7 @@ WORKDIR /app
 
 # Copy shared module
 COPY shared ./shared
+COPY db ./db
 
 # Copy service module files first (for dependency caching)
 COPY services/auth/go.mod services/auth/go.sum* ./services/auth/

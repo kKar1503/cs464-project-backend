@@ -57,6 +57,8 @@ func main() {
 	mux.HandleFunc("GET /players/me/cards/available", handleGetCardsNotInDecks)
 
 	// Deck routes
+	mux.HandleFunc("GET /players/me/decks", handleGetAllDecks)
+	mux.HandleFunc("PUT /players/me/decks", handleUpdateAllDecks)
 	mux.HandleFunc("POST /decks", handleCreateDeck)
 	mux.HandleFunc("GET /decks", handleGetDeck)
 	mux.HandleFunc("PUT /decks", handleUpdateDeck)

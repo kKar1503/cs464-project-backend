@@ -69,6 +69,7 @@ func main() {
 	mux.HandleFunc("POST /auth/logout", handleLogout)
 	mux.HandleFunc("GET /auth/validate", handleValidate)
 	mux.HandleFunc("GET /auth/me", handleMe)
+	mux.HandleFunc("GET /auth/me/mmr", handleGetMyMMR)
 	mux.HandleFunc("POST /auth/ban", handleBanUser)
 	mux.HandleFunc("POST /auth/unban", handleUnbanUser)
 	mux.HandleFunc("GET /health", handleHealth)
