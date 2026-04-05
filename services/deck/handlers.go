@@ -1,14 +1,60 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	db "github.com/kKar1503/cs464-backend/db/sqlc"
 )
+
+// cardRarityCache caches card_id -> rarity mappings in memory.
+// Invalidate by calling cardRarityCache.Invalidate() when the cards table changes.
+var cardRarityCache = &rarityCache{}
+
+type rarityCache struct {
+	mu       sync.RWMutex
+	rarities map[int32]string
+}
+
+func (rc *rarityCache) Get(ctx context.Context) (map[int32]string, error) {
+	rc.mu.RLock()
+	if rc.rarities != nil {
+		defer rc.mu.RUnlock()
+		return rc.rarities, nil
+	}
+	rc.mu.RUnlock()
+
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	// Double-check after acquiring write lock
+	if rc.rarities != nil {
+		return rc.rarities, nil
+	}
+
+	allCards, err := queries.GetAllCards(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rc.rarities = make(map[int32]string, len(allCards))
+	for _, c := range allCards {
+		rc.rarities[c.CardID] = c.Rarity
+	}
+	log.Printf("Card rarity cache loaded: %d cards", len(rc.rarities))
+	return rc.rarities, nil
+}
+
+func (rc *rarityCache) Invalidate() {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	rc.rarities = nil
+	log.Println("Card rarity cache invalidated")
+}
 
 // req/res types for deck apis
 type CreateDeckRequest struct {
@@ -36,6 +82,47 @@ func respondJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(data)
+}
+
+const (
+	maxDeckSize        = 12
+	maxCopiesPerCard   = 2
+	maxLegendaryCards  = 1
+)
+
+// validateDeckCards checks deck composition rules:
+// - at most 12 cards
+// - at most 2 copies of each card
+// - at most 1 legendary card
+func validateDeckCards(ctx context.Context, cardIDs []int64) error {
+	if len(cardIDs) > maxDeckSize {
+		return fmt.Errorf("deck cannot have more than %d cards", maxDeckSize)
+	}
+	counts := make(map[int64]int)
+	for _, id := range cardIDs {
+		counts[id]++
+		if counts[id] > maxCopiesPerCard {
+			return fmt.Errorf("cannot have more than %d copies of card %d", maxCopiesPerCard, id)
+		}
+	}
+
+	// Check legendary limit using cached card rarities
+	rarityMap, err := cardRarityCache.Get(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to validate card rarities")
+	}
+
+	legendaryCount := 0
+	for _, id := range cardIDs {
+		if rarityMap[int32(id)] == "legendary" {
+			legendaryCount++
+			if legendaryCount > maxLegendaryCards {
+				return fmt.Errorf("deck cannot have more than %d legendary card", maxLegendaryCards)
+			}
+		}
+	}
+
+	return nil
 }
 
 
@@ -66,6 +153,10 @@ func handleCreateDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.CardIDs) == 0 {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one card is required"})
+		return
+	}
+	if err := validateDeckCards(r.Context(), req.CardIDs); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -202,6 +293,10 @@ func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.CardIDs) == 0 {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one card is required"})
+		return
+	}
+	if err := validateDeckCards(r.Context(), req.CardIDs); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
