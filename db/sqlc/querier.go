@@ -25,6 +25,7 @@ type Querier interface {
 	DeleteFromQueue(ctx context.Context, userID int64) (sql.Result, error)
 	DeleteFromQueueByUsers(ctx context.Context, arg DeleteFromQueueByUsersParams) error
 	DeleteUser(ctx context.Context, id int64) error
+	GetActiveDeck(ctx context.Context, id int64) (*int32, error)
 	GetActiveQueue(ctx context.Context) ([]GetActiveQueueRow, error)
 	GetActiveTokensByUser(ctx context.Context, userID int64) ([]string, error)
 	GetAllCards(ctx context.Context) ([]Card, error)
@@ -37,6 +38,7 @@ type Querier interface {
 	GetGameSessionPlayers(ctx context.Context, sessionID string) (GetGameSessionPlayersRow, error)
 	GetOngoingGameSession(ctx context.Context, arg GetOngoingGameSessionParams) (string, error)
 	GetPackByIDAndPlayer(ctx context.Context, arg GetPackByIDAndPlayerParams) (GetPackByIDAndPlayerRow, error)
+	GetPlayerCardOwnership(ctx context.Context, playerID int64) ([]GetPlayerCardOwnershipRow, error)
 	GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlayerCardsRow, error)
 	GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCardsNotInDeckParams) ([]GetPlayerCardsNotInDeckRow, error)
 	GetPlayerDeckList(ctx context.Context, playerID int64) ([]GetPlayerDeckListRow, error)
@@ -59,6 +61,7 @@ type Querier interface {
 	RequeuePlayer(ctx context.Context, arg RequeuePlayerParams) error
 	RevokeAllUserSessions(ctx context.Context, userID int64) error
 	RevokeSessionByToken(ctx context.Context, token string) error
+	SetActiveDeck(ctx context.Context, arg SetActiveDeckParams) error
 	SetPlayer1Ready(ctx context.Context, sessionID string) (sql.Result, error)
 	SetPlayer2Ready(ctx context.Context, sessionID string) (sql.Result, error)
 	StartGameSession(ctx context.Context, arg StartGameSessionParams) (sql.Result, error)

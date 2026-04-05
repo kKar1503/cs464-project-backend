@@ -1,5 +1,5 @@
 -- name: CreateDeck :execresult
-INSERT INTO decks (player_id, card_id, name) VALUES (?, ?, ?);
+INSERT INTO decks (player_id, name) VALUES (?, ?);
 
 -- name: InsertDeckCard :exec
 INSERT INTO deck_cards (deck_id, card_id, position) VALUES (?, ?, ?);
@@ -11,7 +11,7 @@ SELECT name, created_at FROM decks WHERE deck_id = ? AND player_id = ?;
 SELECT card_id, position FROM deck_cards WHERE deck_id = ? ORDER BY position;
 
 -- name: UpdateDeck :execresult
-UPDATE decks SET name = ?, card_id = ? WHERE deck_id = ? AND player_id = ?;
+UPDATE decks SET name = ? WHERE deck_id = ? AND player_id = ?;
 
 -- name: DeleteDeckCards :exec
 DELETE FROM deck_cards WHERE deck_id = ?;
@@ -37,7 +37,7 @@ FROM cards WHERE rarity = ? AND affiliation = ? ORDER BY card_id ASC;
 
 -- name: GetPlayerCards :many
 SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
-       c.description, c.icon_url, pc.level, pc.quantity, pc.is_in_deck
+       c.description, c.icon_url, pc.level, pc.quantity
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
 WHERE pc.player_id = ?
@@ -48,7 +48,7 @@ SELECT deck_id, name FROM decks WHERE player_id = ? ORDER BY deck_id ASC;
 
 -- name: GetPlayerCardsNotInDeck :many
 SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
-       c.description, c.icon_url, pc.level, pc.quantity, pc.is_in_deck
+       c.description, c.icon_url, pc.level, pc.quantity
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
 WHERE pc.player_id = ?
@@ -76,3 +76,12 @@ SELECT card_id, card_name, rarity FROM cards WHERE rarity = ? ORDER BY RAND() LI
 
 -- name: CreatePack :execresult
 INSERT INTO card_packs (player_id, pack_type) VALUES (?, ?);
+
+-- name: GetPlayerCardOwnership :many
+SELECT card_id, quantity FROM player_cards WHERE player_id = ?;
+
+-- name: SetActiveDeck :exec
+UPDATE users SET active_deck_id = ? WHERE id = ?;
+
+-- name: GetActiveDeck :one
+SELECT active_deck_id FROM users WHERE id = ?;

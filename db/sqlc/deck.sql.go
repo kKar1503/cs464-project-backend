@@ -12,17 +12,16 @@ import (
 )
 
 const createDeck = `-- name: CreateDeck :execresult
-INSERT INTO decks (player_id, card_id, name) VALUES (?, ?, ?)
+INSERT INTO decks (player_id, name) VALUES (?, ?)
 `
 
 type CreateDeckParams struct {
 	PlayerID int64  `json:"player_id"`
-	CardID   int32  `json:"card_id"`
 	Name     string `json:"name"`
 }
 
 func (q *Queries) CreateDeck(ctx context.Context, arg CreateDeckParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, createDeck, arg.PlayerID, arg.CardID, arg.Name)
+	return q.db.ExecContext(ctx, createDeck, arg.PlayerID, arg.Name)
 }
 
 const createPack = `-- name: CreatePack :execresult
@@ -58,6 +57,17 @@ DELETE FROM deck_cards WHERE deck_id = ?
 func (q *Queries) DeleteDeckCards(ctx context.Context, deckID int32) error {
 	_, err := q.db.ExecContext(ctx, deleteDeckCards, deckID)
 	return err
+}
+
+const getActiveDeck = `-- name: GetActiveDeck :one
+SELECT active_deck_id FROM users WHERE id = ?
+`
+
+func (q *Queries) GetActiveDeck(ctx context.Context, id int64) (*int32, error) {
+	row := q.db.QueryRowContext(ctx, getActiveDeck, id)
+	var active_deck_id *int32
+	err := row.Scan(&active_deck_id)
+	return active_deck_id, err
 }
 
 const getAllCards = `-- name: GetAllCards :many
@@ -287,9 +297,41 @@ func (q *Queries) GetPackByIDAndPlayer(ctx context.Context, arg GetPackByIDAndPl
 	return i, err
 }
 
+const getPlayerCardOwnership = `-- name: GetPlayerCardOwnership :many
+SELECT card_id, quantity FROM player_cards WHERE player_id = ?
+`
+
+type GetPlayerCardOwnershipRow struct {
+	CardID   int32 `json:"card_id"`
+	Quantity int32 `json:"quantity"`
+}
+
+func (q *Queries) GetPlayerCardOwnership(ctx context.Context, playerID int64) ([]GetPlayerCardOwnershipRow, error) {
+	rows, err := q.db.QueryContext(ctx, getPlayerCardOwnership, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetPlayerCardOwnershipRow{}
+	for rows.Next() {
+		var i GetPlayerCardOwnershipRow
+		if err := rows.Scan(&i.CardID, &i.Quantity); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPlayerCards = `-- name: GetPlayerCards :many
 SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
-       c.description, c.icon_url, pc.level, pc.quantity, pc.is_in_deck
+       c.description, c.icon_url, pc.level, pc.quantity
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
 WHERE pc.player_id = ?
@@ -307,7 +349,6 @@ type GetPlayerCardsRow struct {
 	IconUrl     string `json:"icon_url"`
 	Level       int32  `json:"level"`
 	Quantity    int32  `json:"quantity"`
-	IsInDeck    bool   `json:"is_in_deck"`
 }
 
 func (q *Queries) GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlayerCardsRow, error) {
@@ -330,7 +371,6 @@ func (q *Queries) GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlay
 			&i.IconUrl,
 			&i.Level,
 			&i.Quantity,
-			&i.IsInDeck,
 		); err != nil {
 			return nil, err
 		}
@@ -347,7 +387,7 @@ func (q *Queries) GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlay
 
 const getPlayerCardsNotInDeck = `-- name: GetPlayerCardsNotInDeck :many
 SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
-       c.description, c.icon_url, pc.level, pc.quantity, pc.is_in_deck
+       c.description, c.icon_url, pc.level, pc.quantity
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
 WHERE pc.player_id = ?
@@ -373,7 +413,6 @@ type GetPlayerCardsNotInDeckRow struct {
 	IconUrl     string `json:"icon_url"`
 	Level       int32  `json:"level"`
 	Quantity    int32  `json:"quantity"`
-	IsInDeck    bool   `json:"is_in_deck"`
 }
 
 func (q *Queries) GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCardsNotInDeckParams) ([]GetPlayerCardsNotInDeckRow, error) {
@@ -396,7 +435,6 @@ func (q *Queries) GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCard
 			&i.IconUrl,
 			&i.Level,
 			&i.Quantity,
-			&i.IsInDeck,
 		); err != nil {
 			return nil, err
 		}
@@ -545,24 +583,32 @@ func (q *Queries) OpenPack(ctx context.Context, packID int32) error {
 	return err
 }
 
+const setActiveDeck = `-- name: SetActiveDeck :exec
+UPDATE users SET active_deck_id = ? WHERE id = ?
+`
+
+type SetActiveDeckParams struct {
+	ActiveDeckID *int32 `json:"active_deck_id"`
+	ID           int64  `json:"id"`
+}
+
+func (q *Queries) SetActiveDeck(ctx context.Context, arg SetActiveDeckParams) error {
+	_, err := q.db.ExecContext(ctx, setActiveDeck, arg.ActiveDeckID, arg.ID)
+	return err
+}
+
 const updateDeck = `-- name: UpdateDeck :execresult
-UPDATE decks SET name = ?, card_id = ? WHERE deck_id = ? AND player_id = ?
+UPDATE decks SET name = ? WHERE deck_id = ? AND player_id = ?
 `
 
 type UpdateDeckParams struct {
 	Name     string `json:"name"`
-	CardID   int32  `json:"card_id"`
 	DeckID   int32  `json:"deck_id"`
 	PlayerID int64  `json:"player_id"`
 }
 
 func (q *Queries) UpdateDeck(ctx context.Context, arg UpdateDeckParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, updateDeck,
-		arg.Name,
-		arg.CardID,
-		arg.DeckID,
-		arg.PlayerID,
-	)
+	return q.db.ExecContext(ctx, updateDeck, arg.Name, arg.DeckID, arg.PlayerID)
 }
 
 const upsertPlayerCard = `-- name: UpsertPlayerCard :exec

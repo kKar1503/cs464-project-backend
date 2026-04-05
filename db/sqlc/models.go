@@ -111,7 +111,6 @@ type CardStat struct {
 type Deck struct {
 	DeckID    int32     `json:"deck_id"`
 	PlayerID  int64     `json:"player_id"`
-	CardID    int32     `json:"card_id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -154,7 +153,6 @@ type PlayerCard struct {
 	CardID       int32 `json:"card_id"`
 	Level        int32 `json:"level"`
 	Quantity     int32 `json:"quantity"`
-	IsInDeck     bool  `json:"is_in_deck"`
 }
 
 type User struct {
@@ -167,6 +165,7 @@ type User struct {
 	BannedAt     *time.Time `json:"banned_at"`
 	BanReason    *string    `json:"ban_reason"`
 	Mmr          int32      `json:"mmr"`
+	ActiveDeckID *int32     `json:"active_deck_id"`
 }
 
 type UserSession struct {
