@@ -68,11 +68,14 @@ type GameState struct {
 	LastUpdateAt  time.Time    `json:"last_update_at"`
 	WinnerID      PlayerID     `json:"winner_id,omitempty"`
 
-	// Metadata - per-player sequence numbers
-	Player1SequenceNumber int64 `json:"player1_sequence_number"` // Increments with each Player1 action
-	Player2SequenceNumber int64 `json:"player2_sequence_number"` // Increments with each Player2 action
+	// Metadata - per-player sequence numbers (kept for backward compat)
+	Player1SequenceNumber int64 `json:"player1_sequence_number"`
+	Player2SequenceNumber int64 `json:"player2_sequence_number"`
 
-	mu sync.RWMutex // Protects concurrent access
+	// Tick-based sequencing (server-authoritative)
+	TickNumber uint64 `json:"tick_number"`
+
+	mu sync.RWMutex // Protects connection state access from outside game loop
 }
 
 // PlayerView represents a partial view of the game state for a specific player
@@ -94,6 +97,9 @@ type PlayerView struct {
 	OpponentUsername  string          `json:"opponent_username"`
 	OpponentConnected bool            `json:"opponent_connected"`
 	OpponentGameData  json.RawMessage `json:"opponent_game_data,omitempty"` // Opponent's custom game state (partial)
+
+	// Server tick number
+	TickNumber uint64 `json:"tick_number"`
 
 	// Computed hash of this view
 	StateHash uint64 `json:"state_hash"`
@@ -156,16 +162,18 @@ func (gs *GameState) GetPlayerView(playerID PlayerID) *PlayerView {
 		Phase:          gs.Phase,
 		TurnNumber:     gs.TurnNumber,
 		CurrentPlayer:  gs.CurrentPlayer,
-		SequenceNumber: playerSeqNum, // Per-player sequence
+		SequenceNumber: playerSeqNum,
 
 		YourUserID:   yourState.UserID,
 		YourUsername: yourState.Username,
-		YourGameData: yourState.GameData, // Your custom game state
+		YourGameData: yourState.GameData,
 
 		OpponentUserID:    opponentState.UserID,
 		OpponentUsername:  opponentState.Username,
 		OpponentConnected: opponentState.IsConnected,
-		OpponentGameData:  opponentState.GameData, // Opponent's custom game state (you control what's visible)
+		OpponentGameData:  opponentState.GameData,
+
+		TickNumber: gs.TickNumber,
 	}
 
 	// Compute hash of this view
@@ -179,12 +187,12 @@ func (pv *PlayerView) ComputeHash() uint64 {
 	h := xxhash.New()
 
 	// Hash all fields in deterministic order
-	// Session and game metadata3
 	h.Write([]byte(pv.SessionID))
 	h.Write([]byte(pv.Phase))
 	binary.Write(h, binary.LittleEndian, int32(pv.TurnNumber))
 	binary.Write(h, binary.LittleEndian, int32(pv.CurrentPlayer))
 	binary.Write(h, binary.LittleEndian, pv.SequenceNumber)
+	binary.Write(h, binary.LittleEndian, pv.TickNumber)
 
 	// Your state
 	binary.Write(h, binary.LittleEndian, pv.YourUserID)
