@@ -58,9 +58,12 @@ func main() {
 
 	// Deck routes
 	mux.HandleFunc("POST /decks", handleCreateDeck)
-	mux.HandleFunc("GET /decks", handleGetDeck)
-	mux.HandleFunc("PUT /decks", handleUpdateDeck)
-	mux.HandleFunc("DELETE /decks", handleDeleteDeck)
+	mux.HandleFunc("GET /decks", handleListDecks)
+	mux.HandleFunc("GET /decks/{id}", handleGetDeckByID)
+	mux.HandleFunc("PUT /decks/{id}", handleUpdateDeck)
+	mux.HandleFunc("DELETE /decks/{id}", handleDeleteDeck)
+	mux.HandleFunc("PUT /decks/active", handleSetActiveDeck)
+	mux.HandleFunc("GET /decks/active", handleGetActiveDeck)
 
 	// Pack routes
 	mux.HandleFunc("POST /packs", handleBuyPack)

@@ -62,7 +62,6 @@ type CreateDeckRequest struct {
     CardIDs []int64 `json:"card_ids"`
 }
 type UpdateDeckRequest struct {
-    DeckID  int64   `json:"deck_id"`
     Name    string  `json:"name"`
     CardIDs []int64 `json:"card_ids"`
 }
@@ -94,7 +93,8 @@ const (
 // - at most 12 cards
 // - at most 2 copies of each card
 // - at most 1 legendary card
-func validateDeckCards(ctx context.Context, cardIDs []int64) error {
+// - player must own each card with sufficient quantity
+func validateDeckCards(ctx context.Context, userID int64, cardIDs []int64) error {
 	if len(cardIDs) > maxDeckSize {
 		return fmt.Errorf("deck cannot have more than %d cards", maxDeckSize)
 	}
@@ -119,6 +119,25 @@ func validateDeckCards(ctx context.Context, cardIDs []int64) error {
 			if legendaryCount > maxLegendaryCards {
 				return fmt.Errorf("deck cannot have more than %d legendary card", maxLegendaryCards)
 			}
+		}
+	}
+
+	// Check player owns each card with sufficient quantity
+	owned, err := queries.GetPlayerCardOwnership(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to check card ownership")
+	}
+	ownershipMap := make(map[int32]int32, len(owned))
+	for _, o := range owned {
+		ownershipMap[o.CardID] = o.Quantity
+	}
+	for cardID, needed := range counts {
+		available, ok := ownershipMap[int32(cardID)]
+		if !ok {
+			return fmt.Errorf("you do not own card %d", cardID)
+		}
+		if int32(needed) > available {
+			return fmt.Errorf("you only own %d copies of card %d but need %d", available, cardID, needed)
 		}
 	}
 
@@ -151,18 +170,15 @@ func handleCreateDeck(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one card is required"})
 		return
 	}
-	if err := validateDeckCards(r.Context(), req.CardIDs); err != nil {
+	if err := validateDeckCards(r.Context(), userID, req.CardIDs); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
 	ctx := r.Context()
 
-	// decks table requires 1 card_id
-	firstCardID := req.CardIDs[0]
 	result, err := queries.CreateDeck(ctx, db.CreateDeckParams{
 		PlayerID: userID,
-		CardID:   int32(firstCardID),
 		Name:     req.Name,
 	})
 	if err != nil {
@@ -197,7 +213,7 @@ func handleCreateDeck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleGetDeck(w http.ResponseWriter, r *http.Request) {
+func handleListDecks(w http.ResponseWriter, r *http.Request) {
 	userID, err := getUserFromToken(r)
 	if err != nil {
 		if err == errUnauthorized {
@@ -208,16 +224,38 @@ func handleGetDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deckIDStr := r.URL.Query().Get("deck_id")
-	if deckIDStr == "" {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "deck_id is required"})
+	decks, err := queries.GetPlayerDeckList(r.Context(), userID)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get decks"})
+		return
+	}
+
+	type DeckListItem struct {
+		DeckID int64  `json:"deck_id"`
+		Name   string `json:"name"`
+	}
+	result := make([]DeckListItem, 0, len(decks))
+	for _, d := range decks {
+		result = append(result, DeckListItem{DeckID: int64(d.DeckID), Name: d.Name})
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{"decks": result, "count": len(result)})
+}
+
+func handleGetDeckByID(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserFromToken(r)
+	if err != nil {
+		if err == errUnauthorized {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
 
 	var deckID int64
-
-	if _, err := fmt.Sscanf(deckIDStr, "%d", &deckID); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid deck_id"})
+	if _, err := fmt.Sscanf(r.PathValue("id"), "%d", &deckID); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid deck id"})
 		return
 	}
 
@@ -269,20 +307,22 @@ func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var deckID int64
+	if _, err := fmt.Sscanf(r.PathValue("id"), "%d", &deckID); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid deck id"})
+		return
+	}
+
 	var req UpdateDeckRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
-		return
-	}
-	if req.DeckID == 0 {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "deck_id is required"})
 		return
 	}
 	if len(req.CardIDs) == 0 {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one card is required"})
 		return
 	}
-	if err := validateDeckCards(r.Context(), req.CardIDs); err != nil {
+	if err := validateDeckCards(r.Context(), userID, req.CardIDs); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -291,8 +331,7 @@ func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 
 	result, err := queries.UpdateDeck(ctx, db.UpdateDeckParams{
 		Name:     req.Name,
-		CardID:   int32(req.CardIDs[0]),
-		DeckID:   int32(req.DeckID),
+		DeckID:   int32(deckID),
 		PlayerID: userID,
 	})
 	if err != nil {
@@ -305,17 +344,17 @@ func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queries.DeleteDeckCards(ctx, int32(req.DeckID))
+	queries.DeleteDeckCards(ctx, int32(deckID))
 	for i, cardID := range req.CardIDs {
 		queries.InsertDeckCard(ctx, db.InsertDeckCardParams{
-			DeckID:   int32(req.DeckID),
+			DeckID:   int32(deckID),
 			CardID:   int32(cardID),
 			Position: int32(i),
 		})
 	}
 
 	respondJSON(w, http.StatusOK, DeckResponse{
-		DeckID: req.DeckID,
+		DeckID: deckID,
 		Name: req.Name,
 		CardIDs: req.CardIDs,
 		Cards: []DeckCard{},
@@ -334,15 +373,9 @@ func handleDeleteDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deckIDStr := r.URL.Query().Get("deck_id")
-	if deckIDStr == "" {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "deck_id is required"})
-		return
-	}
-
 	var deckID int64
-	if _, err := fmt.Sscanf(deckIDStr, "%d", &deckID); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid deck_id"})
+	if _, err := fmt.Sscanf(r.PathValue("id"), "%d", &deckID); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid deck id"})
 		return
 	}
 
@@ -435,7 +468,6 @@ type PlayerCardResponse struct {
 	IconURL     string `json:"icon_url"`
 	Level       int    `json:"level"`
 	Quantity    int    `json:"quantity"`
-	IsInDeck    bool   `json:"is_in_deck"`
 }
 
 func handleGetPlayerCards(w http.ResponseWriter, r *http.Request) {
@@ -468,7 +500,6 @@ func handleGetPlayerCards(w http.ResponseWriter, r *http.Request) {
 			IconURL:     c.IconUrl,
 			Level:       int(c.Level),
 			Quantity:    int(c.Quantity),
-			IsInDeck:    c.IsInDeck,
 		})
 	}
 
@@ -525,7 +556,6 @@ func handleGetCardsNotInDecks(w http.ResponseWriter, r *http.Request) {
 				IconURL:     c.IconUrl,
 				Level:       int(c.Level),
 				Quantity:    int(c.Quantity),
-				IsInDeck:    c.IsInDeck,
 			})
 		}
 
@@ -537,4 +567,78 @@ func handleGetCardsNotInDecks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{"decks": result})
+}
+
+type SetActiveDeckRequest struct {
+	DeckID int64 `json:"deck_id"`
+}
+
+func handleSetActiveDeck(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserFromToken(r)
+	if err != nil {
+		if err == errUnauthorized {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	var req SetActiveDeckRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	ctx := r.Context()
+
+	// Verify the deck belongs to this player
+	_, err = queries.GetDeckByIDAndPlayer(ctx, db.GetDeckByIDAndPlayerParams{
+		DeckID:   int32(req.DeckID),
+		PlayerID: userID,
+	})
+	if err == sql.ErrNoRows {
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": "deck not found"})
+		return
+	}
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	activeDeckID := int32(req.DeckID)
+	if err := queries.SetActiveDeck(ctx, db.SetActiveDeckParams{
+		ActiveDeckID: &activeDeckID,
+		ID:           userID,
+	}); err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to set active deck"})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "active deck set"})
+}
+
+func handleGetActiveDeck(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserFromToken(r)
+	if err != nil {
+		if err == errUnauthorized {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	activeDeckID, err := queries.GetActiveDeck(r.Context(), userID)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	if activeDeckID == nil {
+		respondJSON(w, http.StatusOK, map[string]interface{}{"active_deck_id": nil})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{"active_deck_id": *activeDeckID})
 }
