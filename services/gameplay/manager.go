@@ -21,10 +21,11 @@ type GameSession struct {
 	Player1Conn     *PlayerConnection
 	Player2Conn     *PlayerConnection
 	TurnTimer       *TurnTimer
+	GameLoop        *GameLoop
 	CreatedAt       time.Time
 	LastActivityAt  time.Time
 	GameplayManager *GameplayManager
-	mu              sync.RWMutex
+	mu              sync.RWMutex // Protects connection pointer access only
 }
 
 // NewGameSession creates a new game session
@@ -38,6 +39,8 @@ func NewGameSession(sessionID string, player1ID, player2ID int64, player1Name, p
 		LastActivityAt:  now,
 	}
 	session.TurnTimer = NewTurnTimer(session)
+	session.GameLoop = NewGameLoop(session)
+	go session.GameLoop.Run()
 	return session
 }
 

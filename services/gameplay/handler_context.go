@@ -101,14 +101,10 @@ func (ctx *PlayerConnectionContext) IsPlayerTurn() bool {
 	return false
 }
 
-// State modification
-func (ctx *PlayerConnectionContext) LockState() {
-	ctx.conn.Session.State.mu.Lock()
-}
+// State modification — no-ops because the game loop is the single writer
+func (ctx *PlayerConnectionContext) LockState() {}
 
-func (ctx *PlayerConnectionContext) UnlockState() {
-	ctx.conn.Session.State.mu.Unlock()
-}
+func (ctx *PlayerConnectionContext) UnlockState() {}
 
 func (ctx *PlayerConnectionContext) IncrementSequence() {
 	ctx.conn.Session.State.IncrementSequence(ctx.conn.PlayerID)
@@ -204,12 +200,8 @@ func (gpa *GameplayAdapter) GetElixer(playerID int64) int {
 
 func (gpa *GameplayAdapter) RemoveElixer(playerID int64, elixerToRemove int) {
 	if playerID == gpa.gameplay.player1ID {
-		gpa.gameplay.elixerMutex1.Lock()
-		defer gpa.gameplay.elixerMutex1.Unlock()
 		gpa.gameplay.game.ElixerPlayer1 -= elixerToRemove
 	} else {
-		gpa.gameplay.elixerMutex2.Lock()
-		defer gpa.gameplay.elixerMutex2.Unlock()
 		gpa.gameplay.game.ElixerPlayer2 -= elixerToRemove
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"time"
 
 	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
 )
@@ -129,10 +130,7 @@ func (ctx *ServerActionContext) handleTurnEnd(params json.RawMessage) error {
 
 	state := ctx.Session.State
 
-	state.mu.Lock()
-	defer state.mu.Unlock()
-
-	// Switch turns
+	// Switch turns (no mutex needed — called from game loop)
 	if turnEndParams.PlayerID == Player1 {
 		state.Phase = PhasePlayer2Turn
 	} else {
@@ -140,8 +138,7 @@ func (ctx *ServerActionContext) handleTurnEnd(params json.RawMessage) error {
 		state.TurnNumber++
 	}
 
-	// Increment sequence for the player whose turn ended
-	state.IncrementSequence(turnEndParams.PlayerID)
+	state.LastUpdateAt = time.Now()
 
 	log.Printf("Player %d turn ended in session %s (reason: %s)",
 		turnEndParams.PlayerID, ctx.Session.State.SessionID, turnEndParams.Reason)
@@ -163,9 +160,6 @@ func (ctx *ServerActionContext) handleOpponentReconnect() error {
 // handleGameStart initializes the game (decks, starting hands, etc.)
 func (ctx *ServerActionContext) handleGameStart() error {
 	state := ctx.Session.State
-
-	state.mu.Lock()
-	defer state.mu.Unlock()
 
 	state.Phase = PhasePlayer1Turn
 	state.TurnNumber = 1
@@ -190,9 +184,6 @@ func (ctx *ServerActionContext) handleGameEnd(params json.RawMessage) error {
 	}
 
 	state := ctx.Session.State
-
-	state.mu.Lock()
-	defer state.mu.Unlock()
 
 	state.Phase = PhaseGameOver
 	state.WinnerID = endParams.WinnerID
