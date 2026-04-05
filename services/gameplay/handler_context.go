@@ -91,14 +91,7 @@ func (ctx *PlayerConnectionContext) GetPlayerView(playerID int) handlers.PlayerV
 }
 
 func (ctx *PlayerConnectionContext) IsPlayerTurn() bool {
-	currentPhase := ctx.conn.Session.State.Phase
-	if ctx.conn.PlayerID == Player1 && currentPhase == PhasePlayer1Turn {
-		return true
-	}
-	if ctx.conn.PlayerID == Player2 && currentPhase == PhasePlayer2Turn {
-		return true
-	}
-	return false
+	return ctx.conn.Session.State.Phase == PhaseActive
 }
 
 // State modification — no-ops because the game loop is the single writer
@@ -166,15 +159,11 @@ func (ctx *PlayerConnectionContext) UpdateActivity() {
 }
 
 func (ctx *PlayerConnectionContext) StartTurnTimer(playerID int) {
-	if ctx.conn.Session.TurnTimer != nil {
-		ctx.conn.Session.TurnTimer.StartTurn(PlayerID(playerID))
-	}
+	// no-op: rounds use RoundTimer, not per-player turn timers
 }
 
 func (ctx *PlayerConnectionContext) StopTurnTimer() {
-	if ctx.conn.Session.TurnTimer != nil {
-		ctx.conn.Session.TurnTimer.StopTurn()
-	}
+	// no-op: rounds use RoundTimer, not per-player turn timers
 }
 
 func (ctx *PlayerConnectionContext) ExecuteServerAction(action string, params interface{}) error {
@@ -191,18 +180,15 @@ type GameplayAdapter struct {
 }
 
 func (gpa *GameplayAdapter) GetElixer(playerID int64) int {
-	if playerID == gpa.gameplay.player1ID {
-		return gpa.gameplay.game.ElixerPlayer1
-	} else {
-		return gpa.gameplay.game.ElixerPlayer2
-	}
+	return gpa.gameplay.GetElixirDisplay(playerID)
 }
 
 func (gpa *GameplayAdapter) RemoveElixer(playerID int64, elixerToRemove int) {
+	milliToRemove := elixerToRemove * MilliElixirPerElixir
 	if playerID == gpa.gameplay.player1ID {
-		gpa.gameplay.game.ElixerPlayer1 -= elixerToRemove
+		gpa.gameplay.game.MilliElixirPlayer1 -= milliToRemove
 	} else {
-		gpa.gameplay.game.ElixerPlayer2 -= elixerToRemove
+		gpa.gameplay.game.MilliElixirPlayer2 -= milliToRemove
 	}
 }
 

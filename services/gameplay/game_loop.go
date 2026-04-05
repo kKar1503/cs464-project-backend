@@ -10,7 +10,6 @@ import (
 const (
 	TickRate     = 4                                    // ticks per second
 	TickInterval = time.Second / time.Duration(TickRate) // 250ms
-	ElixirEvery  = 20                                    // tick elixir every 20 ticks (5 seconds)
 )
 
 // EventType represents the type of game event
@@ -18,7 +17,7 @@ type EventType int
 
 const (
 	EventClientAction    EventType = iota
-	EventTurnTimeout
+	EventRoundEnd                  // round timer expired
 	EventPlayerDisconnect
 	EventShutdown
 )
@@ -39,7 +38,6 @@ type GameLoop struct {
 	done      chan struct{}
 	ticker    *time.Ticker
 	tickCount uint64
-	elixirAcc int
 	dirty     bool
 }
 
@@ -89,11 +87,8 @@ func (gl *GameLoop) processTick() {
 	// Drain all queued events
 	gl.drainEvents()
 
-	// Tick elixir
-	gl.elixirAcc++
-	if gl.elixirAcc >= ElixirEvery {
-		gl.elixirAcc = 0
-		gl.session.GameplayManager.TickElixir()
+	// Tick elixir every tick (fractional accumulation via milliElixir)
+	if gl.session.GameplayManager.TickElixir() {
 		gl.dirty = true
 	}
 
@@ -128,8 +123,8 @@ func (gl *GameLoop) handleEvent(event GameEvent) {
 	switch event.Type {
 	case EventClientAction:
 		gl.handleClientAction(event)
-	case EventTurnTimeout:
-		gl.handleTurnTimeout(event)
+	case EventRoundEnd:
+		gl.handleRoundEnd()
 	case EventPlayerDisconnect:
 		gl.handlePlayerDisconnect(event)
 	case EventShutdown:
@@ -194,41 +189,33 @@ func (gl *GameLoop) handleClientAction(event GameEvent) {
 	log.Printf("Action %s completed for player %d (tick: %d)", msg.Action, event.PlayerID, gl.tickCount)
 }
 
-// handleTurnTimeout processes a turn timeout event
-func (gl *GameLoop) handleTurnTimeout(event GameEvent) {
-	playerID := event.PlayerID
+// handleRoundEnd processes a round ending — advances to next round's pre-turn phase
+func (gl *GameLoop) handleRoundEnd() {
+	log.Printf("Round %d ended in session %s", gl.session.State.TurnNumber, gl.session.State.SessionID)
 
-	log.Printf("Processing turn timeout for player %d in session %s", playerID, gl.session.State.SessionID)
+	// Advance round in gameplay manager (increases elixir cap)
+	gl.session.GameplayManager.AdvanceRound()
 
-	// Verify it's still this player's turn
-	currentPhase := gl.session.State.Phase
-	isStillPlayerTurn := (playerID == Player1 && currentPhase == PhasePlayer1Turn) ||
-		(playerID == Player2 && currentPhase == PhasePlayer2Turn)
-
-	if !isStillPlayerTurn {
-		log.Printf("Player %d already ended turn before timeout, ignoring", playerID)
-		return
-	}
-
-	// Switch turns
-	if playerID == Player1 {
-		gl.session.State.Phase = PhasePlayer2Turn
-	} else {
-		gl.session.State.Phase = PhasePlayer1Turn
-		gl.session.State.TurnNumber++
-	}
+	// Move to pre-turn phase for next round's draw step
+	gl.session.State.Phase = PhasePreTurn
+	gl.session.State.TurnNumber = gl.session.GameplayManager.game.RoundNumber
 	gl.session.State.LastUpdateAt = time.Now()
 
-	// Start timer for next player
-	opponentID := Player1
-	if playerID == Player1 {
-		opponentID = Player2
-	}
-	if gl.session.TurnTimer != nil {
-		gl.session.TurnTimer.StartTurn(opponentID)
+	gl.dirty = true
+}
+
+// StartRound transitions from pre-turn to active and starts the round timer.
+// Called after both players have completed their draw phase.
+func (gl *GameLoop) StartRound() {
+	gl.session.State.Phase = PhaseActive
+	gl.session.State.LastUpdateAt = time.Now()
+
+	if gl.session.RoundTimer != nil {
+		gl.session.RoundTimer.StartRound(gl.session.GameplayManager.game.RoundNumber)
 	}
 
 	gl.dirty = true
+	log.Printf("Round %d active in session %s", gl.session.GameplayManager.game.RoundNumber, gl.session.State.SessionID)
 }
 
 // handlePlayerDisconnect processes a player disconnect event
@@ -256,25 +243,42 @@ func (gl *GameLoop) handleGameOver(winnerID int) {
 	gl.session.State.LastUpdateAt = time.Now()
 	gl.dirty = true
 
-	// Stop the turn timer
-	if gl.session.TurnTimer != nil {
-		gl.session.TurnTimer.StopTurn()
+	// Stop the round timer
+	if gl.session.RoundTimer != nil {
+		gl.session.RoundTimer.Stop()
 	}
 
 	log.Printf("Game over in session %s, winner: Player %d", gl.session.State.SessionID, winner)
 }
 
+// ElixirTickParams is sent with each tick update so clients can display smooth elixir bars.
+type ElixirTickParams struct {
+	MilliElixir int `json:"milli_elixir"` // raw milliElixir (1000 = 1 elixir)
+	Elixir      int `json:"elixir"`       // whole elixir (for spending)
+	ElixirCap   int `json:"elixir_cap"`   // current round's cap (3 at round 1, +1 per round, max 8)
+}
+
 // broadcastTickUpdate sends the current state to all connected players
 func (gl *GameLoop) broadcastTickUpdate() {
+	gm := gl.session.GameplayManager
+
 	p1Conn := gl.session.GetPlayerConnection(Player1)
 	if p1Conn != nil {
 		p1View := gl.session.State.GetPlayerView(Player1)
-		p1Conn.SendStateUpdateWithParams("TICK_UPDATE", p1View, nil)
+		p1Conn.SendStateUpdateWithParams("TICK_UPDATE", p1View, ElixirTickParams{
+			MilliElixir: gm.GetMilliElixir(gm.player1ID),
+			Elixir:      gm.GetElixirDisplay(gm.player1ID),
+			ElixirCap:   gm.game.ElixirCap,
+		})
 	}
 
 	p2Conn := gl.session.GetPlayerConnection(Player2)
 	if p2Conn != nil {
 		p2View := gl.session.State.GetPlayerView(Player2)
-		p2Conn.SendStateUpdateWithParams("TICK_UPDATE", p2View, nil)
+		p2Conn.SendStateUpdateWithParams("TICK_UPDATE", p2View, ElixirTickParams{
+			MilliElixir: gm.GetMilliElixir(gm.player2ID),
+			Elixir:      gm.GetElixirDisplay(gm.player2ID),
+			ElixirCap:   gm.game.ElixirCap,
+		})
 	}
 }

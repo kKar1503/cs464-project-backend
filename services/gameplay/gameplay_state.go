@@ -28,17 +28,27 @@ type PlayerHand struct {
 	DrawnCardIDs  map[int]bool `json:"-"`             // card IDs already drawn in previous turns
 }
 
+const (
+	MilliElixirPerElixir = 1000                              // 1 elixir = 1000 milliElixir
+	ElixirChargeSeconds  = 5                                 // 1 elixir charges every 5 seconds
+	MilliElixirPerTick   = MilliElixirPerElixir / (TickRate * ElixirChargeSeconds) // 50 per tick at 4 ticks/sec
+	MaxElixir            = 8                                 // max elixir a player can hold
+	MaxMilliElixir       = MaxElixir * MilliElixirPerElixir  // 8000
+	StartingElixir       = 3                                 // elixir at round 1
+)
+
 type GameplayState struct {
-	SessionID     string
-	Player1Health int
-	Player2Health int
-	ElixerPlayer1 int
-	BoardPlayer1  *[2][3]handlers.Card
-	ElixerPlayer2 int
-	BoardPlayer2  *[2][3]handlers.Card
-	RoundNumber   int
-	Player1Hand   *PlayerHand
-	Player2Hand   *PlayerHand
+	SessionID          string
+	Player1Health      int
+	Player2Health      int
+	MilliElixirPlayer1 int // stored as milliElixir (1000 = 1 elixir)
+	MilliElixirPlayer2 int
+	BoardPlayer1       *[2][3]handlers.Card
+	BoardPlayer2       *[2][3]handlers.Card
+	RoundNumber        int
+	ElixirCap          int // current max elixir for this round (3 at round 1, +1 per round, max 8)
+	Player1Hand        *PlayerHand
+	Player2Hand        *PlayerHand
 }
 
 // GameplayManager manages gameplay state. All methods are called from the
@@ -54,16 +64,17 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 	var boardPlayer2 [2][3]handlers.Card
 	return &GameplayManager{
 		game: &GameplayState{
-			SessionID:     sessionID,
-			Player1Health: 250,
-			Player2Health: 250,
-			ElixerPlayer1: 3,
-			BoardPlayer1:  &boardPlayer1,
-			ElixerPlayer2: 3,
-			BoardPlayer2:  &boardPlayer2,
-			RoundNumber:   1,
-			Player1Hand:   &PlayerHand{DrawnCardIDs: make(map[int]bool)},
-			Player2Hand:   &PlayerHand{DrawnCardIDs: make(map[int]bool)},
+			SessionID:          sessionID,
+			Player1Health:      250,
+			Player2Health:      250,
+			MilliElixirPlayer1: StartingElixir * MilliElixirPerElixir,
+			MilliElixirPlayer2: StartingElixir * MilliElixirPerElixir,
+			BoardPlayer1:       &boardPlayer1,
+			BoardPlayer2:       &boardPlayer2,
+			RoundNumber:        1,
+			ElixirCap:          StartingElixir, // round 1 cap = 3
+			Player1Hand:        &PlayerHand{DrawnCardIDs: make(map[int]bool)},
+			Player2Hand:        &PlayerHand{DrawnCardIDs: make(map[int]bool)},
 		},
 		player1ID: player1ID,
 		player2ID: player2ID,
@@ -176,11 +187,43 @@ func (gh *GameplayManager) getPlayerHand(playerID int64) *PlayerHand {
 	return gh.game.Player2Hand
 }
 
-// TickElixir increments elixir for both players. Called by the game loop every ElixirEvery ticks.
-func (gh *GameplayManager) TickElixir() {
-	maxElixir := gh.game.RoundNumber + 5
-	gh.game.ElixerPlayer1 = min(maxElixir, gh.game.ElixerPlayer1+1)
-	gh.game.ElixerPlayer2 = min(maxElixir, gh.game.ElixerPlayer2+1)
+// TickElixir increments milliElixir for both players each tick.
+// Caps at the current round's elixir cap (not the absolute max).
+// Returns true if either player's elixir changed (for dirty flag).
+func (gh *GameplayManager) TickElixir() bool {
+	capMilli := gh.game.ElixirCap * MilliElixirPerElixir
+
+	p1Before := gh.game.MilliElixirPlayer1
+	p2Before := gh.game.MilliElixirPlayer2
+
+	gh.game.MilliElixirPlayer1 = min(capMilli, gh.game.MilliElixirPlayer1+MilliElixirPerTick)
+	gh.game.MilliElixirPlayer2 = min(capMilli, gh.game.MilliElixirPlayer2+MilliElixirPerTick)
+
+	return gh.game.MilliElixirPlayer1 != p1Before || gh.game.MilliElixirPlayer2 != p2Before
+}
+
+// AdvanceRound increments the round number and raises the elixir cap by 1 (max 8).
+func (gh *GameplayManager) AdvanceRound() {
+	gh.game.RoundNumber++
+	if gh.game.ElixirCap < MaxElixir {
+		gh.game.ElixirCap++
+	}
+}
+
+// GetElixirDisplay returns the whole elixir value for a player (for display/spending).
+func (gh *GameplayManager) GetElixirDisplay(playerID int64) int {
+	if playerID == gh.player1ID {
+		return gh.game.MilliElixirPlayer1 / MilliElixirPerElixir
+	}
+	return gh.game.MilliElixirPlayer2 / MilliElixirPerElixir
+}
+
+// GetMilliElixir returns the raw milliElixir value for a player (for client-side smooth display).
+func (gh *GameplayManager) GetMilliElixir(playerID int64) int {
+	if playerID == gh.player1ID {
+		return gh.game.MilliElixirPlayer1
+	}
+	return gh.game.MilliElixirPlayer2
 }
 
 // CheckWinCondition returns whether the game is over and which player won (1 or 2).
@@ -196,17 +239,24 @@ func (gh *GameplayManager) CheckWinCondition() (gameOver bool, winnerID int) {
 
 func (gh *GameplayManager) PlayCard(playerID int64, card *handlers.Card, xPos int, yPos int) error {
 	isPlayer1 := playerID == gh.player1ID
+	costInMilli := card.ElixerCost * MilliElixirPerElixir
 
 	if isPlayer1 {
+		if gh.game.MilliElixirPlayer1 < costInMilli {
+			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer1/MilliElixirPerElixir, card.ElixerCost)
+		}
 		if err := placeCard(xPos, yPos, gh.game.BoardPlayer1, card); err != nil {
 			return err
 		}
-		gh.game.ElixerPlayer1 -= card.ElixerCost
+		gh.game.MilliElixirPlayer1 -= costInMilli
 	} else {
+		if gh.game.MilliElixirPlayer2 < costInMilli {
+			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer2/MilliElixirPerElixir, card.ElixerCost)
+		}
 		if err := placeCard(xPos, yPos, gh.game.BoardPlayer2, card); err != nil {
 			return err
 		}
-		gh.game.ElixerPlayer2 -= card.ElixerCost
+		gh.game.MilliElixirPlayer2 -= costInMilli
 	}
 
 	return nil
