@@ -88,38 +88,14 @@ func (tt *TurnTimer) onTimeout() {
 
 	log.Printf("Player %d timed out in session %s", playerID, tt.session.State.SessionID)
 
-	// Check if it's still this player's turn
-	currentPhase := tt.session.State.Phase
-	isStillPlayerTurn := (playerID == Player1 && currentPhase == PhasePlayer1Turn) ||
-		(playerID == Player2 && currentPhase == PhasePlayer2Turn)
-
-	if !isStillPlayerTurn {
-		log.Printf("Player %d already ended turn before timeout, ignoring", playerID)
-		return
+	// Queue timeout event for the game loop to process
+	if tt.session.GameLoop != nil {
+		tt.session.GameLoop.QueueEvent(GameEvent{
+			Type:      EventTurnTimeout,
+			PlayerID:  playerID,
+			Timestamp: time.Now(),
+		})
 	}
-
-	// Execute server-initiated end turn with timeout reason
-	ctx := &ServerActionContext{
-		Session:  tt.session,
-		PlayerID: playerID,
-	}
-
-	turnEndParams := TurnEndParams{
-		Reason:   TurnEndReasonTimedOut,
-		PlayerID: playerID,
-	}
-
-	if err := ctx.ExecuteServerAction(ServerActionTurnEnd, turnEndParams); err != nil {
-		log.Printf("Failed to execute timeout end turn for player %d: %v", playerID, err)
-		return
-	}
-
-	// Start timer for next player
-	opponentID := Player1
-	if playerID == Player1 {
-		opponentID = Player2
-	}
-	tt.StartTurn(opponentID)
 }
 
 // Shutdown stops the timer completely

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
 )
 
 const (
@@ -29,13 +28,14 @@ type ClientMessage struct {
 
 // ServerMessage represents a message to the client
 type ServerMessage struct {
-	MessageType    string      `json:"message_type"` // "state_update", "action_result", "error"
+	MessageType    string      `json:"message_type"` // "state_update", "action_result", "tick_update", "error"
 	Action         GameAction  `json:"action,omitempty"`
-	Params         interface{} `json:"params,omitempty"` // Action parameters (e.g., TurnEndParams)
+	Params         interface{} `json:"params,omitempty"`
 	Result         string      `json:"result,omitempty"` // "success", "failure"
 	ErrorMessage   string      `json:"error_message,omitempty"`
 	StateView      *PlayerView `json:"state_view,omitempty"`
 	SequenceNumber int64       `json:"sequence_number"`
+	TickNumber     uint64      `json:"tick_number"`
 	Timestamp      time.Time   `json:"timestamp"`
 }
 
@@ -98,8 +98,14 @@ func (pc *PlayerConnection) ReadPump() {
 			continue
 		}
 
-		// Process the action
-		pc.ProcessAction(&clientMsg)
+		// Queue the action for the game loop to process
+		pc.Session.GameLoop.QueueEvent(GameEvent{
+			Type:      EventClientAction,
+			PlayerID:  pc.PlayerID,
+			Message:   &clientMsg,
+			Conn:      pc,
+			Timestamp: time.Now(),
+		})
 	}
 }
 
@@ -211,88 +217,27 @@ func (pc *PlayerConnection) Close() {
 	close(pc.Send)
 	pc.Conn.Close()
 
-	// Update player connection status in game state
-	if pc.Session != nil && pc.Session.State != nil {
-		pc.Session.State.SetPlayerConnected(pc.PlayerID, false)
-		log.Printf("Player %d disconnected from session %s", pc.PlayerID, pc.SessionID)
-
-		// Notify opponent of disconnection
-		opponentID := Player1
-		if pc.PlayerID == Player1 {
-			opponentID = Player2
-		}
-
-		opponentView := pc.Session.State.GetPlayerView(opponentID)
-		pc.Session.BroadcastToOpponent(pc.PlayerID, &ServerMessage{
-			MessageType:    "state_update",
-			Action:         ActionDisconnect,
-			StateView:      opponentView,
-			SequenceNumber: pc.Session.State.GetPlayerSequence(opponentID),
-			Timestamp:      time.Now(),
+	// Queue disconnect event for the game loop to handle
+	if pc.Session != nil && pc.Session.GameLoop != nil {
+		pc.Session.GameLoop.QueueEvent(GameEvent{
+			Type:      EventPlayerDisconnect,
+			PlayerID:  pc.PlayerID,
+			Timestamp: time.Now(),
 		})
+		log.Printf("Player %d disconnected from session %s", pc.PlayerID, pc.SessionID)
 	}
 }
 
-// ProcessAction processes an action from the client
+// ProcessAction is called from main.go for the initial JOIN_GAME action
+// before the game loop is fully active. For all other actions, events are
+// queued to the game loop via ReadPump.
 func (pc *PlayerConnection) ProcessAction(msg *ClientMessage) {
-	log.Printf("Processing action %s from player %d in session %s (seq: %d)", msg.Action, pc.PlayerID, pc.SessionID, msg.SequenceNumber)
-
-	// Update session activity
-	pc.Session.UpdateActivity()
-
-	// Verify sequence number matches for THIS player
-	currentSeq := pc.Session.State.GetPlayerSequence(pc.PlayerID)
-	if msg.SequenceNumber != currentSeq {
-		pc.SendError(fmt.Sprintf("Sequence mismatch: expected %d, got %d", currentSeq, msg.SequenceNumber), msg.Action)
-		return
-	}
-
-	// Create handler context
-	ctx := NewHandlerContext(pc)
-
-	// Params is already json.RawMessage - pass directly to handler
-	// Handler will parse it based on the action type
-	handlerMsg := &handlers.ClientMessage{
-		Action:         string(msg.Action),
-		Params:         msg.Params,
-		StateHashAfter: msg.StateHashAfter,
-		SequenceNumber: msg.SequenceNumber,
-	}
-
-	// Route to appropriate action handler
-	handler := handlers.GetActionHandler(string(msg.Action))
-	if handler == nil {
-		pc.SendError(fmt.Sprintf("Unknown action: %s", msg.Action), msg.Action)
-		return
-	}
-
-	// Execute the action handler (this applies the action to server state)
-	if err := handler(ctx, handlerMsg); err != nil {
-		pc.SendError(err.Error(), msg.Action)
-		log.Printf("Action %s failed for player %d in session %s: %v", msg.Action, pc.PlayerID, pc.SessionID, err)
-		return
-	}
-
-	// NOW verify the hash matches what client computed after action
-	// Get the updated player view after server applied the action
-	updatedView := pc.Session.State.GetPlayerView(pc.PlayerID)
-	if msg.StateHashAfter != updatedView.StateHash {
-		// Hash mismatch - client state diverged from server
-		pc.SendError(fmt.Sprintf("State hash mismatch after action: client tampered or desynced (expected %d, got %d)", updatedView.StateHash, msg.StateHashAfter), msg.Action)
-		log.Printf("Hash mismatch for player %d in session %s after action %s: expected %d, got %d", pc.PlayerID, pc.SessionID, msg.Action, updatedView.StateHash, msg.StateHashAfter)
-
-		// Send current state to resync
-		pc.SendStateUpdate(msg.Action, updatedView)
-
-		// TODO: Consider reverting the action here or marking session as suspicious
-		return
-	}
-
-	// Take snapshot after successful action and validation
-	pc.Session.SnapshotManager.TakeSnapshot(pc.Session.State, msg.Action, pc.PlayerID)
-
-	// Send ACK to the initiating client
-	pc.SendActionAck(msg.Action, updatedView)
-
-	log.Printf("Action %s completed successfully for player %d in session %s (hash verified, ACK sent)", msg.Action, pc.PlayerID, pc.SessionID)
+	// Queue to game loop
+	pc.Session.GameLoop.QueueEvent(GameEvent{
+		Type:      EventClientAction,
+		PlayerID:  pc.PlayerID,
+		Message:   msg,
+		Conn:      pc,
+		Timestamp: time.Now(),
+	})
 }
