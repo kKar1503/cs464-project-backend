@@ -227,12 +227,18 @@ func (gl *GameLoop) enterPreTurn() {
 
 // handlePreTurnEnd fires when the 10s pre-turn timer expires — transition to active phase
 func (gl *GameLoop) handlePreTurnEnd() {
+	if gl.session.State.Phase == PhaseGameOver {
+		return
+	}
 	log.Printf("Pre-turn ended, starting active phase in session %s", gl.session.State.SessionID)
 	gl.StartRound()
 }
 
 // handleRoundEnd processes a round ending — advances to next round's pre-turn phase
 func (gl *GameLoop) handleRoundEnd() {
+	if gl.session.State.Phase == PhaseGameOver {
+		return
+	}
 	log.Printf("Round %d ended in session %s", gl.session.State.TurnNumber, gl.session.State.SessionID)
 
 	// Advance round in gameplay manager (increases elixir cap)

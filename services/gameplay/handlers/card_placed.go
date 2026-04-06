@@ -12,6 +12,10 @@ type CardPlaced struct {
 }
 
 func HandleCardPlaced(ctx HandlerContext, msg *ClientMessage) error {
+	if ctx.GetGameState().GetPhase() != "ACTIVE" {
+		return fmt.Errorf("can only place cards during ACTIVE phase")
+	}
+
 	var req CardPlaced
 	if err := json.Unmarshal(msg.Params, &req); err != nil {
 		return fmt.Errorf("invalid card placement request")

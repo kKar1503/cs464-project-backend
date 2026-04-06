@@ -27,10 +27,10 @@ const (
 // PlayerHand tracks the three card zones for a single player.
 // Flow: Deck → DrawPile → Hand → Board → back to Deck
 type PlayerHand struct {
-	Deck              []HandCard   `json:"deck"`
-	DrawPile          []HandCard   `json:"draw_pile"`
-	Hand              []HandCard   `json:"hand"`
-	SelectedThisTurn  map[int]bool `json:"-"` // card IDs selected during current PRE_TURN (deselectible)
+	Deck             []HandCard `json:"deck"`
+	DrawPile         []HandCard `json:"draw_pile"`
+	Hand             []HandCard `json:"hand"`
+	SelectedThisTurn map[int]int `json:"-"` // card ID → count selected during current PRE_TURN
 }
 
 const (
@@ -128,8 +128,8 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 			BoardPlayer2:       &boardPlayer2,
 			RoundNumber:        1,
 			ElixirCap:          StartingElixirCap,
-			Player1Hand:        &PlayerHand{SelectedThisTurn: make(map[int]bool)},
-			Player2Hand:        &PlayerHand{SelectedThisTurn: make(map[int]bool)},
+			Player1Hand:        &PlayerHand{SelectedThisTurn: make(map[int]int)},
+			Player2Hand:        &PlayerHand{SelectedThisTurn: make(map[int]int)},
 		},
 		player1ID: player1ID,
 		player2ID: player2ID,
@@ -369,7 +369,7 @@ func (gh *GameplayManager) SelectCard(playerID int64, cardID int) error {
 		if c.CardID == cardID {
 			hand.Hand = append(hand.Hand, c)
 			hand.DrawPile = append(hand.DrawPile[:i], hand.DrawPile[i+1:]...)
-			hand.SelectedThisTurn[cardID] = true
+			hand.SelectedThisTurn[cardID]++
 			return nil
 		}
 	}
@@ -381,7 +381,7 @@ func (gh *GameplayManager) SelectCard(playerID int64, cardID int) error {
 func (gh *GameplayManager) DeselectCard(playerID int64, cardID int) error {
 	hand := gh.getPlayerHand(playerID)
 
-	if !hand.SelectedThisTurn[cardID] {
+	if hand.SelectedThisTurn[cardID] <= 0 {
 		return fmt.Errorf("card %d cannot be deselected (not selected this turn)", cardID)
 	}
 
@@ -389,7 +389,10 @@ func (gh *GameplayManager) DeselectCard(playerID int64, cardID int) error {
 		if c.CardID == cardID {
 			hand.DrawPile = append(hand.DrawPile, c)
 			hand.Hand = append(hand.Hand[:i], hand.Hand[i+1:]...)
-			delete(hand.SelectedThisTurn, cardID)
+			hand.SelectedThisTurn[cardID]--
+			if hand.SelectedThisTurn[cardID] <= 0 {
+				delete(hand.SelectedThisTurn, cardID)
+			}
 			return nil
 		}
 	}
@@ -400,7 +403,7 @@ func (gh *GameplayManager) DeselectCard(playerID int64, cardID int) error {
 // Called when leaving PRE_TURN phase.
 func (gh *GameplayManager) ClearSelectedThisTurn(playerID int64) {
 	hand := gh.getPlayerHand(playerID)
-	hand.SelectedThisTurn = make(map[int]bool)
+	hand.SelectedThisTurn = make(map[int]int)
 }
 
 // PlayFromHand removes a card from the hand (when played onto the board).
