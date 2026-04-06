@@ -3,50 +3,68 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 )
 
 type CardPlaced struct {
-	PlayerID int64 `json:"player_id"`
-	CardID   int   `json:"card_id"`
-	XPos     int   `json:"x_pos"`
-	YPos     int   `json:"y_pos"`
+	CardID int `json:"card_id"`
+	Row    int `json:"row"`
+	Col    int `json:"col"`
 }
 
 func HandleCardPlaced(ctx HandlerContext, msg *ClientMessage) error {
-	var cardPlaced CardPlaced
-	var err = json.Unmarshal(msg.Params, &cardPlaced)
-	if err != nil {
-		return fmt.Errorf("Unable to deserialise json file")
+	var req CardPlaced
+	if err := json.Unmarshal(msg.Params, &req); err != nil {
+		return fmt.Errorf("invalid card placement request")
 	}
 
-	if cardPlaced.XPos < 0 || cardPlaced.YPos < 0 || cardPlaced.XPos > 2 || cardPlaced.YPos > 3 {
-		return fmt.Errorf("Invalid Card Placement")
+	// Validate board bounds (2 rows, 3 cols)
+	if req.Row < 0 || req.Row > 1 || req.Col < 0 || req.Col > 2 {
+		return fmt.Errorf("invalid board position: row %d, col %d", req.Row, req.Col)
 	}
 
-	// Somehow check if there is valid elixir for
-	var GameplayManager = ctx.GetGameplayManager()
-	// var isPlayer1 = GameplayManager.GetPlayer1ID() == cardPlaced.PlayerID;
-	
-	// TODO: Get the proper card request from the other service
+	gm := ctx.GetGameplayManager()
+	playerID := ctx.GetUserID()
+
+	// Find the card in the player's hand
+	hand := gm.GetHand(playerID)
+	var handCard *HandCardInfo
+	for i := range hand {
+		if hand[i].CardID == req.CardID {
+			handCard = &hand[i]
+			break
+		}
+	}
+	if handCard == nil {
+		return fmt.Errorf("card %d is not in your hand", req.CardID)
+	}
+
+	// Check elixir
+	if gm.GetElixer(playerID) < handCard.ManaCost {
+		return fmt.Errorf("not enough elixir: have %d, need %d", gm.GetElixer(playerID), handCard.ManaCost)
+	}
+
+	// Build the board card with charge timer
 	card := &Card{
-		CardID:        cardPlaced.CardID,
-		ElixerCost:    0,
-		CurrentHealth: 0,
-		TimeToAttack:  0,
+		CardID:               handCard.CardID,
+		CardName:             handCard.CardName,
+		ElixerCost:           handCard.ManaCost,
+		CurrentHealth:        handCard.HP,
+		MaxHealth:            handCard.HP,
+		CardAttack:           handCard.Attack,
+		Colour:               handCard.Colour,
+		ChargeTicksRemaining: ChargeTicksTotal,
+		IsCharging:           true,
 	}
 
-	// For current mock -> true == too little elixer, false is enough
-	if GameplayManager.GetElixer(cardPlaced.PlayerID) == 0 { // TODO: Add the condition to get the card information
-		return fmt.Errorf("Not enough elixer")
-	}
-
-	card.LastMessage = time.Now()
-
-	err = GameplayManager.PlaceCard(cardPlaced.PlayerID, card, cardPlaced.XPos, cardPlaced.YPos)
-	if err != nil {
+	// Place on board (deducts elixir)
+	if err := gm.PlaceCard(playerID, card, req.Row, req.Col); err != nil {
 		return err
 	}
-	
+
+	// Remove from hand
+	if err := gm.RemoveFromHand(playerID, req.CardID); err != nil {
+		return err
+	}
+
 	return nil
 }

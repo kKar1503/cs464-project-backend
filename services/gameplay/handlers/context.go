@@ -1,8 +1,5 @@
 package handlers
 
-import (
-	"time"
-)
 
 // HandlerContext provides the interface for handlers to interact with game state
 // This allows handlers to be decoupled from the main package implementation
@@ -89,99 +86,11 @@ type OnSpawn func(summonParam SummonParam)
 type OnDefend func(playerId int64, gameplayManager GameplayManager, attackX int, attackY int)
 type OnDeath func(playerId int64, gameplayManager GameplayManager, attackX int, attackY int)
 
-func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]Card, defendingPlayer *[2][3]Card, playerHealth *int) int {
-	y_coord := -1
-	if (*defendingPlayer)[0][attackY].CardID == 0 && (*defendingPlayer)[1][attackY].CardID == 0 {
-		*playerHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		(*attackingPlayer)[attackX][attackY].CurrentHealth -= 5 // To be replaced by the actual attack health
-	} else if (*defendingPlayer)[0][attackY].CardID == 0 {
-		(*defendingPlayer)[1][attackY].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		if (*defendingPlayer)[1][attackY].CurrentHealth == 0 {
-			(*defendingPlayer)[1][attackY].CardID = 0
-		}
-		y_coord = 1
-	} else {
-		(*defendingPlayer)[0][attackY].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		if (*defendingPlayer)[0][attackY].CurrentHealth == 0 {
-			(*defendingPlayer)[0][attackY].CardID = 0
-		}
-		y_coord = 0
-	}
+// Attack, summon, defence, and death registries are stubs for future card effect implementation.
+// Attack resolution is handled by the game loop's TickBoard(), not these registries.
 
-	attackingPlayer[attackX][attackY].LastMessage = time.Now()
-	return y_coord
-}
+var attackRegistry = map[string]OnAttack{}
 
-var attackRegistry = map[string]OnAttack{
-	"basic": func(playerID int64, gameplayManager GameplayManager, attackX int, attackY int, randX int, randY int) {
-		var self, opponent = gameplayManager.GetBoard(playerID)
-		var myHealth, _ = gameplayManager.GetPlayerHealth(playerID)
-		attackBoard(attackX, attackY, self, opponent, myHealth)
-
-	},
-	// TODO: To be implemented on a later date cause I still havent figured out how I want to do this
-	// NOTE: For the time being, I am setting -1, -1 as attack self player, -2, -2 as attacking opponent player
-	"random_all": func(playerID int64, gameplayManager GameplayManager, attackX int, attackY int, randX int, randY int) {
-		var self, opponent = gameplayManager.GetBoard(playerID)
-		var myHealth, opponentHealth = gameplayManager.GetPlayerHealth(playerID)
-		if randX == -1 && randY == -1 {
-			*myHealth -= (*self)[attackX][attackY].CardAttack
-		} else if randX == -2 && randY == -2 {
-			*opponentHealth -= (*self)[attackX][attackY].CardAttack
-			(*self)[attackX][attackY].CurrentHealth -= 5
-		} else if randX/2 >= 2 {
-			(*opponent)[randX-2][randY].CurrentHealth -= (*self)[attackX][attackY].CardAttack
-		} else {
-			(*self)[randX][randY].CurrentHealth -= (*self)[attackX][attackY].CardAttack
-		}
-	},
-	// TODO: To be implemented on a later date cause I still havent figured out how I want to do this
-	"random_enemy": func(playerID int64, gameplayManager GameplayManager, attackX int, attackY int, randX int, randY int) {
-		var self, opponent = gameplayManager.GetBoard(playerID)
-		var _, opponentHealth = gameplayManager.GetPlayerHealth(playerID)
-
-		if randX < 0 && randY < 0 {
-			*opponentHealth -= (*self)[attackX][attackY].CardAttack
-			(*self)[attackX][attackY].CurrentHealth -= 5
-		} else {
-			(*opponent)[randX-2][randY].CurrentHealth -= (*self)[attackY][attackY].CardAttack
-		}
-	},
-	"suicide": func(playerID int64, gameplayManager GameplayManager, attackX int, attackY int, randX int, randY int) {
-		var self, opponent = gameplayManager.GetBoard(playerID)
-		var myHealth, _ = gameplayManager.GetPlayerHealth(playerID)
-		attackBoard(attackX, attackY, self, opponent, myHealth)
-		(*self)[attackX][attackY].CurrentHealth -= 10
-	},
-	"back_row": func(playerID int64, gameplayManager GameplayManager, attackX int, attackY int, randX int, randY int) {
-		var self, opponent = gameplayManager.GetBoard(playerID)
-		var myHealth, _ = gameplayManager.GetPlayerHealth(playerID)
-
-		if (*opponent)[1][attackY].CardID == 0 {
-			*myHealth -= (*self)[attackX][attackY].CardAttack
-			(*self)[attackX][attackY].CurrentHealth -= 5 // To be replaced by the actual attack health
-		} else {
-			(*opponent)[1][attackY].CurrentHealth -= (*self)[attackX][attackY].CardAttack
-			if (*opponent)[1][attackY].CurrentHealth == 0 {
-				(*opponent)[1][attackY].CardID = 0
-			}
-		}
-	},
-	"reset_attack": func(playerID int64, gameplayManager GameplayManager, attackX int, attackY int, randX int, randY int) {
-		var self, opponent = gameplayManager.GetBoard(playerID)
-		var myHealth, _ = gameplayManager.GetPlayerHealth(playerID)
-		y_coord := attackBoard(attackX, attackY, self, opponent, myHealth)
-		// Eh theoretically should reset timer
-		if y_coord != -1 {
-			opponent[y_coord][attackX].LastMessage = time.Now()
-		}
-	},
-	"heal_adj": func(playerID int64, gameplayManager GameplayManager, attackX int, attackY int, randX int, randY int) {
-		var self, opponent = gameplayManager.GetBoard(playerID)
-		var myHealth, _ = gameplayManager.GetPlayerHealth(playerID)
-		attackBoard(attackX, attackY, self, opponent, myHealth)
-	},
-}
 
 type SummonParam struct {
 	playerID        int64
@@ -268,14 +177,24 @@ var deathRegistry = map[string]OnDeath{
 	},
 }
 
+const (
+	ChargeTicksTotal = 40 // 10 seconds at 4 ticks/sec
+)
+
 type Card struct {
 	CardID        int
+	CardName      string
 	ElixerCost    int
 	CurrentHealth int
+	MaxHealth     int
 	CardAttack    int
-	TimeToAttack  int
-	LastMessage   time.Time
+	Colour        string
 
+	// Charge-based auto-attack
+	ChargeTicksRemaining int  // starts at ChargeTicksTotal, counts down each tick
+	IsCharging           bool // true once placed on board
+
+	// Effect callbacks (for future use)
 	OnAttack OnAttack
 	OnSpawn  OnSpawn
 	OnDefend OnDefend
@@ -299,10 +218,10 @@ type GameplayManager interface {
 	GetBoard(playerID int64) (yours *[2][3]Card, opponents *[2][3]Card)
 	GetPlayerHealth(playerID int64) (you *int, opponent *int)
 	PlaceCard(playerID int64, card *Card, xPos int, yPos int) error
-	AttackCard(playerID int64, xPos int, yPos int) error
 
 	// Hand drawing
 	OfferCards(playerID int64) []HandCardInfo
 	SelectCards(playerID int64, selectedIDs []int) error
 	GetHand(playerID int64) []HandCardInfo
+	RemoveFromHand(playerID int64, cardID int) error
 }
