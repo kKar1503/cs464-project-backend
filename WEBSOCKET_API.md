@@ -42,26 +42,50 @@ Sent automatically when connecting. Initializes the player in the session. When 
 
 ---
 
-#### `SELECT_CARDS`
+#### `SELECT_CARD`
 
-Move cards from the draw pile into your hand during the pre-turn phase. You can select up to 4 cards (hand max is 4). Cards not selected remain in the draw pile for future rounds.
+Move a single card from the draw pile into your hand. Can be called multiple times during pre-turn (up to hand max of 4).
 
 **Params:**
 ```json
 {
-  "card_ids": [3, 6]
+  "card_id": 3
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
-| `card_ids` | int[] | Card IDs to move from draw pile to hand. Send `[]` to skip selection. |
+| `card_id` | int | Card ID to move from draw pile to hand |
 
-**When:** During `PRE_TURN` phase (10 seconds). If not sent before the phase ends, no cards are moved to hand.
+**When:** Only during `PRE_TURN` phase (10 seconds).
 
 **Errors:**
-- `"can only pick up to N cards (hand has X/4)"` — hand is full or would exceed 4
+- `"can only select cards during PRE_TURN phase"` — wrong phase
+- `"hand is full (4/4)"` — hand already has 4 cards
 - `"card N not in draw pile"` — card ID not found in your draw pile
+
+---
+
+#### `DESELECT_CARD`
+
+Move a single card from your hand back to the draw pile. Allows changing your mind during the pre-turn phase.
+
+**Params:**
+```json
+{
+  "card_id": 3
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `card_id` | int | Card ID to move from hand back to draw pile |
+
+**When:** Only during `PRE_TURN` phase (10 seconds).
+
+**Errors:**
+- `"can only deselect cards during PRE_TURN phase"` — wrong phase
+- `"card N not in hand"` — card ID not found in your hand
 
 ---
 

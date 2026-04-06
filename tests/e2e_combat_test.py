@@ -273,11 +273,12 @@ def run_combat_test(attacker_label, attacker_token, defender_token):
     initial_deck_size = atk.deck_size
 
     if len(dp) >= 2:
-        card_ids = [dp[0]["card_id"], dp[1]["card_id"]]
         card_to_play = dp[0]
-        print(f"  ATK selecting: {card_ids}")
-        atk.send_action("SELECT_CARDS", {"card_ids": card_ids})
-        dfn.send_action("SELECT_CARDS", {"card_ids": []})
+        print(f"  ATK selecting card {dp[0]['card_id']} ({dp[0]['card_name']})")
+        atk.send_action("SELECT_CARD", {"card_id": dp[0]["card_id"]})
+        time.sleep(0.5)
+        print(f"  ATK selecting card {dp[1]['card_id']} ({dp[1]['card_name']})")
+        atk.send_action("SELECT_CARD", {"card_id": dp[1]["card_id"]})
         time.sleep(2)
 
         print(f"  {CYAN}ATK hand: {len(atk.hand)} cards — {[c['card_name'] for c in atk.hand]}{NC}")
@@ -364,12 +365,12 @@ def run_combat_test(attacker_label, attacker_token, defender_token):
             print(f"  {CYAN}[{int(time.time()-start)}s] → {phase}, DFN HP={enemy_hp}, board={len(board)}, hand={len(hand)}, draw={len(draw_pile)}, elixir={elixir}{NC}")
             last_phase = phase
 
-        # PRE_TURN: select cards
+        # PRE_TURN: select cards one at a time
         if phase == "PRE_TURN" and draw_pile:
             select_count = min(4 - len(hand), len(draw_pile))
-            if select_count > 0:
-                atk.send_action("SELECT_CARDS", {"card_ids": [c["card_id"] for c in draw_pile[:select_count]]})
-            dfn.send_action("SELECT_CARDS", {"card_ids": []})
+            for card in draw_pile[:select_count]:
+                atk.send_action("SELECT_CARD", {"card_id": card["card_id"]})
+                time.sleep(0.3)
 
         # ACTIVE: place cards
         if phase == "ACTIVE" and hand and len(board) < 6:

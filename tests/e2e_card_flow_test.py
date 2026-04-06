@@ -268,10 +268,6 @@ def main():
     print(f"  {CYAN}P1 elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
     print(f"  {CYAN}P2 elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
 
-    # Both skip card selection
-    print(f"\n  {CYAN}Both selecting 0 cards (skip){NC}")
-    p1.send_action("SELECT_CARDS", {"card_ids": []})
-    p2.send_action("SELECT_CARDS", {"card_ids": []})
     time.sleep(1)
 
     # Wait for ACTIVE (10s pre-turn timer)
@@ -306,8 +302,6 @@ def main():
     assert_true("R2: P1 elixir cap = 6", p1.latest_elixir_cap == 6, f"got {p1.latest_elixir_cap}")
     assert_true("R2: P2 elixir cap = 6", p2.latest_elixir_cap == 6, f"got {p2.latest_elixir_cap}")
 
-    p1.send_action("SELECT_CARDS", {"card_ids": []})
-    p2.send_action("SELECT_CARDS", {"card_ids": []})
 
     print(f"\n{YELLOW}Round 2: Waiting for ACTIVE{NC}")
     p1.wait_for_phase("ACTIVE", timeout=15)
@@ -345,8 +339,6 @@ def main():
     if p2_board is not None:
         assert_true("P2 board is empty", len(p2_board) == 0, f"has {len(p2_board)} cards")
 
-    p1.send_action("SELECT_CARDS", {"card_ids": []})
-    p2.send_action("SELECT_CARDS", {"card_ids": []})
 
     p1.wait_for_phase("ACTIVE", timeout=15)
     p2.wait_for_phase("ACTIVE", timeout=5)

@@ -245,8 +245,8 @@ def main():
         print(f"  {CYAN}P2 pre-turn: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
 
         # Both skip selection
-        p1.send_action("SELECT_CARDS", {"card_ids": []})
-        p2.send_action("SELECT_CARDS", {"card_ids": []})
+        # no selection needed
+        # no selection needed
 
         # Wait for ACTIVE (pre-turn lasts 10 seconds)
         got_active_p1 = p1.wait_for_phase("ACTIVE", timeout=15)

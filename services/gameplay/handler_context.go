@@ -208,8 +208,12 @@ func (gpa *GameplayAdapter) GetHandCards(playerID int64) []handlers.HandCardInfo
 	return handCardsToInfo(gpa.gameplay.GetHand(playerID))
 }
 
-func (gpa *GameplayAdapter) SelectFromDrawPile(playerID int64, cardIDs []int) error {
-	return gpa.gameplay.SelectFromDrawPile(playerID, cardIDs)
+func (gpa *GameplayAdapter) SelectCard(playerID int64, cardID int) error {
+	return gpa.gameplay.SelectCard(playerID, cardID)
+}
+
+func (gpa *GameplayAdapter) DeselectCard(playerID int64, cardID int) error {
+	return gpa.gameplay.DeselectCard(playerID, cardID)
 }
 
 func (gpa *GameplayAdapter) PlayFromHand(playerID int64, cardID int) (*handlers.HandCardInfo, error) {

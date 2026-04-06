@@ -5,23 +5,38 @@ import (
 	"fmt"
 )
 
-type SelectCardsRequest struct {
-	CardIDs []int `json:"card_ids"`
+type SelectCardRequest struct {
+	CardID int `json:"card_id"`
 }
 
-// HandleSelectCards handles moving cards from draw pile to hand during pre-turn.
-func HandleSelectCards(ctx HandlerContext, msg *ClientMessage) error {
-	var req SelectCardsRequest
+type DeselectCardRequest struct {
+	CardID int `json:"card_id"`
+}
+
+// HandleSelectCard moves a single card from draw pile to hand. Only allowed during PRE_TURN.
+func HandleSelectCard(ctx HandlerContext, msg *ClientMessage) error {
+	if ctx.GetGameState().GetPhase() != "PRE_TURN" {
+		return fmt.Errorf("can only select cards during PRE_TURN phase")
+	}
+
+	var req SelectCardRequest
 	if err := json.Unmarshal(msg.Params, &req); err != nil {
-		return fmt.Errorf("invalid select cards request")
+		return fmt.Errorf("invalid select card request")
 	}
 
-	gm := ctx.GetGameplayManager()
-	playerID := ctx.GetUserID()
+	return ctx.GetGameplayManager().SelectCard(ctx.GetUserID(), req.CardID)
+}
 
-	if err := gm.SelectFromDrawPile(playerID, req.CardIDs); err != nil {
-		return err
+// HandleDeselectCard moves a single card from hand back to draw pile. Only allowed during PRE_TURN.
+func HandleDeselectCard(ctx HandlerContext, msg *ClientMessage) error {
+	if ctx.GetGameState().GetPhase() != "PRE_TURN" {
+		return fmt.Errorf("can only deselect cards during PRE_TURN phase")
 	}
 
-	return nil
+	var req DeselectCardRequest
+	if err := json.Unmarshal(msg.Params, &req); err != nil {
+		return fmt.Errorf("invalid deselect card request")
+	}
+
+	return ctx.GetGameplayManager().DeselectCard(ctx.GetUserID(), req.CardID)
 }

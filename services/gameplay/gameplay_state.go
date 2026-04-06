@@ -300,30 +300,36 @@ func (gh *GameplayManager) TopUpDrawPile(playerID int64) {
 	hand.Deck = hand.Deck[toAdd:]
 }
 
-// SelectFromDrawPile moves cards from the draw pile to hand during pre-turn.
-// Player picks up to MaxHand (4) cards from the draw pile.
-func (gh *GameplayManager) SelectFromDrawPile(playerID int64, cardIDs []int) error {
+// SelectCard moves a single card from draw pile to hand.
+func (gh *GameplayManager) SelectCard(playerID int64, cardID int) error {
 	hand := gh.getPlayerHand(playerID)
 
-	if len(cardIDs) > MaxHand-len(hand.Hand) {
-		return fmt.Errorf("can only pick up to %d cards (hand has %d/%d)", MaxHand-len(hand.Hand), len(hand.Hand), MaxHand)
+	if len(hand.Hand) >= MaxHand {
+		return fmt.Errorf("hand is full (%d/%d)", len(hand.Hand), MaxHand)
 	}
 
-	for _, id := range cardIDs {
-		found := false
-		for i, c := range hand.DrawPile {
-			if c.CardID == id {
-				hand.Hand = append(hand.Hand, c)
-				hand.DrawPile = append(hand.DrawPile[:i], hand.DrawPile[i+1:]...)
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("card %d not in draw pile", id)
+	for i, c := range hand.DrawPile {
+		if c.CardID == cardID {
+			hand.Hand = append(hand.Hand, c)
+			hand.DrawPile = append(hand.DrawPile[:i], hand.DrawPile[i+1:]...)
+			return nil
 		}
 	}
-	return nil
+	return fmt.Errorf("card %d not in draw pile", cardID)
+}
+
+// DeselectCard moves a single card from hand back to draw pile.
+func (gh *GameplayManager) DeselectCard(playerID int64, cardID int) error {
+	hand := gh.getPlayerHand(playerID)
+
+	for i, c := range hand.Hand {
+		if c.CardID == cardID {
+			hand.DrawPile = append(hand.DrawPile, c)
+			hand.Hand = append(hand.Hand[:i], hand.Hand[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("card %d not in hand", cardID)
 }
 
 // PlayFromHand removes a card from the hand (when played onto the board).
