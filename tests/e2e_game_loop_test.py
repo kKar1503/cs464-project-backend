@@ -231,62 +231,66 @@ def main():
         print(f"\n{YELLOW}Round {round_num}{NC}")
 
         # Wait for PRE_TURN
-        got_pt = p1.wait_for_phase("PRE_TURN", timeout=40)
-        assert_true(f"R{round_num}: P1 sees PRE_TURN", got_pt, f"phase={p1.latest_phase}")
+        got_pt_p1 = p1.wait_for_phase("PRE_TURN", timeout=40)
+        got_pt_p2 = p2.wait_for_phase("PRE_TURN", timeout=5)
+        assert_true(f"R{round_num}: P1 sees PRE_TURN", got_pt_p1, f"phase={p1.latest_phase}")
+        assert_true(f"R{round_num}: P2 sees PRE_TURN", got_pt_p2, f"phase={p2.latest_phase}")
 
-        if not got_pt:
+        if not got_pt_p1:
             print(f"  {RED}Stuck — P1 phase history: {p1.phase_history}{NC}")
             break
 
-        # Record elixir at pre-turn (before draw)
-        preturn_elixir = p1.latest_elixir
-        preturn_cap = p1.latest_elixir_cap
-        print(f"  {CYAN}Pre-turn: elixir={preturn_elixir}, cap={preturn_cap}{NC}")
+        # Record elixir at pre-turn
+        print(f"  {CYAN}P1 pre-turn: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+        print(f"  {CYAN}P2 pre-turn: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
 
-        # Both draw (empty selection = skip)
-        p1.send_action("DRAW_CARDS", {"selected_card_ids": []})
-        p2.send_action("DRAW_CARDS", {"selected_card_ids": []})
+        # Both skip selection
+        p1.send_action("SELECT_CARDS", {"card_ids": []})
+        p2.send_action("SELECT_CARDS", {"card_ids": []})
 
         # Wait for ACTIVE (pre-turn lasts 10 seconds)
-        got_active = p1.wait_for_phase("ACTIVE", timeout=15)
-        assert_true(f"R{round_num}: P1 sees ACTIVE", got_active, f"phase={p1.latest_phase}")
+        got_active_p1 = p1.wait_for_phase("ACTIVE", timeout=15)
+        got_active_p2 = p2.wait_for_phase("ACTIVE", timeout=5)
+        assert_true(f"R{round_num}: P1 sees ACTIVE", got_active_p1, f"phase={p1.latest_phase}")
+        assert_true(f"R{round_num}: P2 sees ACTIVE", got_active_p2, f"phase={p2.latest_phase}")
 
-        if not got_active:
+        if not got_active_p1:
             print(f"  {RED}Stuck — P1 phase history: {p1.phase_history}{NC}")
             break
 
-        active_elixir = p1.latest_elixir
-        active_cap = p1.latest_elixir_cap
-        print(f"  {CYAN}Active start: elixir={active_elixir}, cap={active_cap}{NC}")
+        print(f"  {CYAN}P1 active: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+        print(f"  {CYAN}P2 active: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
 
         # Verify elixir cap matches expected for this round
         expected_cap = min(round_num + 4, 8)  # round 1=5, round 2=6, ..., round 4+=8
-        assert_true(f"R{round_num}: elixir cap = {expected_cap}", active_cap == expected_cap,
-                    f"got {active_cap}")
+        assert_true(f"R{round_num}: P1 elixir cap = {expected_cap}", p1.latest_elixir_cap == expected_cap,
+                    f"got {p1.latest_elixir_cap}")
+        assert_true(f"R{round_num}: P2 elixir cap = {expected_cap}", p2.latest_elixir_cap == expected_cap,
+                    f"got {p2.latest_elixir_cap}")
 
-        # Wait for round to end (30s) — the round timer fires EventRoundEnd
+        # Wait for round to end (30s)
         if round_num < 5:
             print(f"  Waiting 30s for round to end...")
-            got_next_pt = p1.wait_for_phase("PRE_TURN", timeout=35)
-            assert_true(f"R{round_num}: round ended → PRE_TURN", got_next_pt,
+            got_next_p1 = p1.wait_for_phase("PRE_TURN", timeout=35)
+            got_next_p2 = p2.wait_for_phase("PRE_TURN", timeout=5)
+            assert_true(f"R{round_num}: P1 round ended → PRE_TURN", got_next_p1,
                         f"phase={p1.latest_phase}")
+            assert_true(f"R{round_num}: P2 round ended → PRE_TURN", got_next_p2,
+                        f"phase={p2.latest_phase}")
 
-            end_elixir = p1.latest_elixir
-            end_cap = p1.latest_elixir_cap
-            print(f"  {CYAN}Round end: elixir={end_elixir}, cap={end_cap}{NC}")
+            print(f"  {CYAN}P1 round end: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+            print(f"  {CYAN}P2 round end: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
 
-            # By round end, elixir should have charged to cap (30s = 6 elixir gain, capped)
-            assert_true(f"R{round_num}: elixir reached cap ({expected_cap})",
-                        end_elixir == expected_cap,
-                        f"got {end_elixir}")
+            assert_true(f"R{round_num}: P1 elixir reached cap ({expected_cap})",
+                        p1.latest_elixir == expected_cap, f"got {p1.latest_elixir}")
+            assert_true(f"R{round_num}: P2 elixir reached cap ({expected_cap})",
+                        p2.latest_elixir == expected_cap, f"got {p2.latest_elixir}")
         else:
-            # Last round — wait a few seconds to observe
             time.sleep(5)
-            final_elixir = p1.latest_elixir
-            final_cap = p1.latest_elixir_cap
-            print(f"  {CYAN}Final: elixir={final_elixir}, cap={final_cap}{NC}")
-            assert_true(f"R5: cap = 8", final_cap == 8,
-                        f"got {final_cap}")
+            print(f"  {CYAN}P1 final: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+            print(f"  {CYAN}P2 final: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
+            assert_true("R5: P1 cap = 8", p1.latest_elixir_cap == 8, f"got {p1.latest_elixir_cap}")
+            assert_true("R5: P2 cap = 8", p2.latest_elixir_cap == 8, f"got {p2.latest_elixir_cap}")
 
     # ── Cleanup ──
     p1.close()

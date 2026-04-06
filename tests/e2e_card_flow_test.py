@@ -253,104 +253,107 @@ def main():
     # Round 1: PRE_TURN → observe draw pile → select cards → ACTIVE
     # ──────────────────────────────────────────────
     print(f"\n{YELLOW}Round 1: Pre-turn phase{NC}")
-    got_pt = p1.wait_for_phase("PRE_TURN", timeout=15)
-    assert_true("R1: P1 sees PRE_TURN", got_pt, f"phase={p1.latest_phase}")
+    got_pt_p1 = p1.wait_for_phase("PRE_TURN", timeout=15)
+    got_pt_p2 = p2.wait_for_phase("PRE_TURN", timeout=5)
+    assert_true("R1: P1 sees PRE_TURN", got_pt_p1, f"phase={p1.latest_phase}")
+    assert_true("R1: P2 sees PRE_TURN", got_pt_p2, f"phase={p2.latest_phase}")
 
-    if not got_pt:
+    if not got_pt_p1:
         print(f"  {RED}Phase history: {p1.phase_history}, aborting{NC}")
         p1.close()
         p2.close()
         sys.exit(1)
 
-    # Give a moment for tick updates to include draw pile info
     time.sleep(2)
     print(f"  {CYAN}P1 elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+    print(f"  {CYAN}P2 elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
 
-    # During pre-turn, players select cards from draw pile to hand
-    # Send SELECT_CARDS with empty list (don't pick any cards yet)
-    print(f"\n  {CYAN}P1 selecting 0 cards (skip){NC}")
+    # Both skip card selection
+    print(f"\n  {CYAN}Both selecting 0 cards (skip){NC}")
     p1.send_action("SELECT_CARDS", {"card_ids": []})
     p2.send_action("SELECT_CARDS", {"card_ids": []})
     time.sleep(1)
 
     # Wait for ACTIVE (10s pre-turn timer)
     print(f"\n{YELLOW}Round 1: Waiting for ACTIVE phase (10s pre-turn){NC}")
-    got_active = p1.wait_for_phase("ACTIVE", timeout=15)
-    assert_true("R1: P1 sees ACTIVE", got_active, f"phase={p1.latest_phase}")
+    got_active_p1 = p1.wait_for_phase("ACTIVE", timeout=15)
+    got_active_p2 = p2.wait_for_phase("ACTIVE", timeout=5)
+    assert_true("R1: P1 sees ACTIVE", got_active_p1, f"phase={p1.latest_phase}")
+    assert_true("R1: P2 sees ACTIVE", got_active_p2, f"phase={p2.latest_phase}")
 
-    r1_start_elixir = p1.latest_elixir
-    r1_cap = p1.latest_elixir_cap
-    print(f"  {CYAN}Active: elixir={r1_start_elixir}, cap={r1_cap}{NC}")
-    assert_true("R1: elixir cap = 5", r1_cap == 5, f"got {r1_cap}")
+    print(f"  {CYAN}P1 active: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+    print(f"  {CYAN}P2 active: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
+    assert_true("R1: P1 elixir cap = 5", p1.latest_elixir_cap == 5, f"got {p1.latest_elixir_cap}")
+    assert_true("R1: P2 elixir cap = 5", p2.latest_elixir_cap == 5, f"got {p2.latest_elixir_cap}")
 
     # No cards played — wait for round end
     print(f"  Waiting 30s for round to end...")
-    got_pt2 = p1.wait_for_phase("PRE_TURN", timeout=35)
-    assert_true("R1: round ended → PRE_TURN", got_pt2, f"phase={p1.latest_phase}")
+    p1.wait_for_phase("PRE_TURN", timeout=35)
+    p2.wait_for_phase("PRE_TURN", timeout=5)
 
-    r1_end_elixir = p1.latest_elixir
-    print(f"  {CYAN}Round 1 end: elixir={r1_end_elixir}, cap={p1.latest_elixir_cap}{NC}")
-    assert_true("R1: elixir reached cap 5", r1_end_elixir == 5, f"got {r1_end_elixir}")
+    print(f"  {CYAN}P1 round 1 end: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+    print(f"  {CYAN}P2 round 1 end: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
+    assert_true("R1: P1 elixir reached cap 5", p1.latest_elixir == 5, f"got {p1.latest_elixir}")
+    assert_true("R1: P2 elixir reached cap 5", p2.latest_elixir == 5, f"got {p2.latest_elixir}")
 
     # ──────────────────────────────────────────────
-    # Round 2: PRE_TURN → select cards → ACTIVE → observe
+    # Round 2
     # ──────────────────────────────────────────────
     print(f"\n{YELLOW}Round 2: Pre-turn phase{NC}")
     time.sleep(2)
-    r2_cap = p1.latest_elixir_cap
-    print(f"  {CYAN}Pre-turn: elixir={p1.latest_elixir}, cap={r2_cap}{NC}")
-    assert_true("R2: elixir cap = 6", r2_cap == 6, f"got {r2_cap}")
+    print(f"  {CYAN}P1 pre-turn: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+    print(f"  {CYAN}P2 pre-turn: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
+    assert_true("R2: P1 elixir cap = 6", p1.latest_elixir_cap == 6, f"got {p1.latest_elixir_cap}")
+    assert_true("R2: P2 elixir cap = 6", p2.latest_elixir_cap == 6, f"got {p2.latest_elixir_cap}")
 
-    # Again skip card selection
     p1.send_action("SELECT_CARDS", {"card_ids": []})
     p2.send_action("SELECT_CARDS", {"card_ids": []})
 
     print(f"\n{YELLOW}Round 2: Waiting for ACTIVE{NC}")
-    got_active2 = p1.wait_for_phase("ACTIVE", timeout=15)
-    assert_true("R2: P1 sees ACTIVE", got_active2, f"phase={p1.latest_phase}")
+    p1.wait_for_phase("ACTIVE", timeout=15)
+    p2.wait_for_phase("ACTIVE", timeout=5)
 
-    # Wait for round end
+    print(f"  {CYAN}P1 active: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+    print(f"  {CYAN}P2 active: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
+
     print(f"  Waiting 30s for round to end...")
-    got_pt3 = p1.wait_for_phase("PRE_TURN", timeout=35)
-    assert_true("R2: round ended → PRE_TURN", got_pt3, f"phase={p1.latest_phase}")
+    p1.wait_for_phase("PRE_TURN", timeout=35)
+    p2.wait_for_phase("PRE_TURN", timeout=5)
 
-    r2_end_elixir = p1.latest_elixir
-    r2_end_cap = p1.latest_elixir_cap
-    print(f"  {CYAN}Round 2 end: elixir={r2_end_elixir}, cap={r2_end_cap}{NC}")
-    assert_true("R2: elixir reached cap 6", r2_end_elixir == 6, f"got {r2_end_elixir}")
-    assert_true("R2: next cap = 7", r2_end_cap == 7, f"got {r2_end_cap}")
+    print(f"  {CYAN}P1 round 2 end: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+    print(f"  {CYAN}P2 round 2 end: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
+    assert_true("R2: P1 elixir reached cap 6", p1.latest_elixir == 6, f"got {p1.latest_elixir}")
+    assert_true("R2: P2 elixir reached cap 6", p2.latest_elixir == 6, f"got {p2.latest_elixir}")
+    assert_true("R2: P1 next cap = 7", p1.latest_elixir_cap == 7, f"got {p1.latest_elixir_cap}")
+    assert_true("R2: P2 next cap = 7", p2.latest_elixir_cap == 7, f"got {p2.latest_elixir_cap}")
 
     # ──────────────────────────────────────────────
-    # Round 3: Observe draw pile accumulation
-    # Since nobody selected cards for 2 rounds, draw pile should have accumulated
-    # Round 1: +5 cards from deck
-    # Round 2: +5 cards from deck (if deck has enough)
-    # Round 3: draw pile should be at 8 (capped) if deck had enough cards
+    # Round 3
     # ──────────────────────────────────────────────
     print(f"\n{YELLOW}Round 3: Observe state{NC}")
     time.sleep(2)
-    r3_cap = p1.latest_elixir_cap
-    print(f"  {CYAN}Pre-turn: elixir={p1.latest_elixir}, cap={r3_cap}{NC}")
-    assert_true("R3: elixir cap = 7", r3_cap == 7, f"got {r3_cap}")
+    print(f"  {CYAN}P1 pre-turn: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+    print(f"  {CYAN}P2 pre-turn: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
+    assert_true("R3: P1 elixir cap = 7", p1.latest_elixir_cap == 7, f"got {p1.latest_elixir_cap}")
+    assert_true("R3: P2 elixir cap = 7", p2.latest_elixir_cap == 7, f"got {p2.latest_elixir_cap}")
 
-    # Check board — should be empty since no cards were played
-    board = p1.latest_your_board
-    if board is not None:
-        assert_true("Board is empty (no cards played)", len(board) == 0,
-                    f"board has {len(board)} cards")
-    else:
-        print(f"  {CYAN}(board data not in tick params yet){NC}")
+    # Check boards — should be empty
+    p1_board = p1.latest_your_board
+    p2_board = p2.latest_your_board
+    if p1_board is not None:
+        assert_true("P1 board is empty", len(p1_board) == 0, f"has {len(p1_board)} cards")
+    if p2_board is not None:
+        assert_true("P2 board is empty", len(p2_board) == 0, f"has {len(p2_board)} cards")
 
-    # Skip selection again
     p1.send_action("SELECT_CARDS", {"card_ids": []})
     p2.send_action("SELECT_CARDS", {"card_ids": []})
 
-    got_active3 = p1.wait_for_phase("ACTIVE", timeout=15)
-    assert_true("R3: P1 sees ACTIVE", got_active3, f"phase={p1.latest_phase}")
+    p1.wait_for_phase("ACTIVE", timeout=15)
+    p2.wait_for_phase("ACTIVE", timeout=5)
 
-    # Just wait a bit and observe
     time.sleep(5)
-    print(f"  {CYAN}R3 active: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+    print(f"  {CYAN}P1 R3 active: elixir={p1.latest_elixir}, cap={p1.latest_elixir_cap}{NC}")
+    print(f"  {CYAN}P2 R3 active: elixir={p2.latest_elixir}, cap={p2.latest_elixir_cap}{NC}")
 
     # ── Summary ──
     print(f"\n{YELLOW}Phase history:{NC}")
