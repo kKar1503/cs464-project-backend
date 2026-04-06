@@ -277,6 +277,59 @@ func (q *Queries) GetDeckCards(ctx context.Context, deckID int32) ([]GetDeckCard
 	return items, nil
 }
 
+const getDeckCardsWithDetails = `-- name: GetDeckCardsWithDetails :many
+SELECT dc.position, c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
+       COALESCE(cs.power, 0) AS attack, COALESCE(cs.hp, 0) AS hp
+FROM deck_cards dc
+JOIN cards c ON dc.card_id = c.card_id
+LEFT JOIN card_stats cs ON cs.card_id = c.card_id AND cs.level = 1
+WHERE dc.deck_id = ?
+ORDER BY dc.position
+`
+
+type GetDeckCardsWithDetailsRow struct {
+	Position    int32  `json:"position"`
+	CardID      int32  `json:"card_id"`
+	CardName    string `json:"card_name"`
+	Affiliation int32  `json:"affiliation"`
+	Rarity      string `json:"rarity"`
+	ManaCost    int32  `json:"mana_cost"`
+	Attack      int32  `json:"attack"`
+	Hp          int32  `json:"hp"`
+}
+
+func (q *Queries) GetDeckCardsWithDetails(ctx context.Context, deckID int32) ([]GetDeckCardsWithDetailsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getDeckCardsWithDetails, deckID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetDeckCardsWithDetailsRow{}
+	for rows.Next() {
+		var i GetDeckCardsWithDetailsRow
+		if err := rows.Scan(
+			&i.Position,
+			&i.CardID,
+			&i.CardName,
+			&i.Affiliation,
+			&i.Rarity,
+			&i.ManaCost,
+			&i.Attack,
+			&i.Hp,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPackByIDAndPlayer = `-- name: GetPackByIDAndPlayer :one
 SELECT pack_type, is_opened FROM card_packs WHERE pack_id = ? AND player_id = ?
 `

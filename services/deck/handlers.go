@@ -834,3 +834,66 @@ func handleInitStarterContent(w http.ResponseWriter, r *http.Request) {
 		"active_deck_id": firstDeckID,
 	})
 }
+
+// Internal endpoint — returns the full active deck for a player (used by gameplay service)
+func handleGetActiveDeckForGame(w http.ResponseWriter, r *http.Request) {
+	userIDStr := r.URL.Query().Get("user_id")
+	if userIDStr == "" {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+		return
+	}
+
+	var userID int64
+	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid user_id"})
+		return
+	}
+
+	ctx := r.Context()
+
+	activeDeckID, err := queries.GetActiveDeck(ctx, userID)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get active deck"})
+		return
+	}
+	if activeDeckID == nil {
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": "no active deck set"})
+		return
+	}
+
+	cards, err := queries.GetDeckCardsWithDetails(ctx, *activeDeckID)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load deck cards"})
+		return
+	}
+
+	type DeckCardForGame struct {
+		CardID      int    `json:"card_id"`
+		CardName    string `json:"card_name"`
+		Affiliation int    `json:"affiliation"`
+		Rarity      string `json:"rarity"`
+		ManaCost    int    `json:"mana_cost"`
+		Attack      int    `json:"attack"`
+		HP          int    `json:"hp"`
+		Position    int    `json:"position"`
+	}
+
+	result := make([]DeckCardForGame, 0, len(cards))
+	for _, c := range cards {
+		result = append(result, DeckCardForGame{
+			CardID:      int(c.CardID),
+			CardName:    c.CardName,
+			Affiliation: int(c.Affiliation),
+			Rarity:      c.Rarity,
+			ManaCost:    int(c.ManaCost),
+			Attack:      int(c.Attack),
+			HP:          int(c.Hp),
+			Position:    int(c.Position),
+		})
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"deck_id": *activeDeckID,
+		"cards":   result,
+	})
+}

@@ -34,6 +34,7 @@ type Querier interface {
 	GetAllCardsByRarityAndAffiliation(ctx context.Context, arg GetAllCardsByRarityAndAffiliationParams) ([]Card, error)
 	GetDeckByIDAndPlayer(ctx context.Context, arg GetDeckByIDAndPlayerParams) (GetDeckByIDAndPlayerRow, error)
 	GetDeckCards(ctx context.Context, deckID int32) ([]GetDeckCardsRow, error)
+	GetDeckCardsWithDetails(ctx context.Context, deckID int32) ([]GetDeckCardsWithDetailsRow, error)
 	GetExpiredWaitingSessions(ctx context.Context) ([]GetExpiredWaitingSessionsRow, error)
 	GetGameSessionPlayers(ctx context.Context, sessionID string) (GetGameSessionPlayersRow, error)
 	GetOngoingGameSession(ctx context.Context, arg GetOngoingGameSessionParams) (string, error)

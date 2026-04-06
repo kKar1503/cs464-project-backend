@@ -89,6 +89,15 @@ INSERT INTO card_packs (player_id, pack_type) VALUES (?, ?);
 -- name: GetPlayerCardOwnership :many
 SELECT card_id, quantity FROM player_cards WHERE player_id = ?;
 
+-- name: GetDeckCardsWithDetails :many
+SELECT dc.position, c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
+       COALESCE(cs.power, 0) AS attack, COALESCE(cs.hp, 0) AS hp
+FROM deck_cards dc
+JOIN cards c ON dc.card_id = c.card_id
+LEFT JOIN card_stats cs ON cs.card_id = c.card_id AND cs.level = 1
+WHERE dc.deck_id = ?
+ORDER BY dc.position;
+
 -- name: SetActiveDeck :exec
 UPDATE users SET active_deck_id = ? WHERE id = ?;
 
