@@ -22,7 +22,6 @@ func init() {
 	RegisterActionHandler("SELECT_CARD", HandleSelectCard)
 	RegisterActionHandler("DESELECT_CARD", HandleDeselectCard)
 	RegisterActionHandler("JOIN_GAME", HandleJoinGame)
-	RegisterActionHandler("CLICK", HandleClick)
 	RegisterActionHandler("SURRENDER", HandleSurrender)
 	RegisterActionHandler("RECONNECT", HandleReconnect)
 }
