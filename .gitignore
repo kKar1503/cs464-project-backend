@@ -10,6 +10,7 @@ bin/
 /auth
 /deck
 /matchmaking
+/gameplay
 services/deck/deck
 services/gameplay/gameplay
 services/matchmaking/matchmaking
