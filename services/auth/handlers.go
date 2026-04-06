@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -16,41 +18,23 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var starterCardIDs = []int32{1, 2, 3, 4, 5, 6}
-
-// giveStarterContent gives a new user 2 copies each of cards 1-6
-// and creates 3 identical starter decks containing all 12 cards.
-func giveStarterContent(ctx context.Context, userID int64) {
-	for _, cardID := range starterCardIDs {
-		if err := queries.SetPlayerCardQuantity(ctx, db.SetPlayerCardQuantityParams{
-			PlayerID: userID,
-			CardID:   cardID,
-			Quantity: 2,
-		}); err != nil {
-			log.Printf("Failed to give starter card %d to user %d: %v", cardID, userID, err)
-		}
+// giveStarterContent calls the deck service to create starter cards, decks, and set active deck.
+func giveStarterContent(userID int64) {
+	deckServiceURL := os.Getenv("DECK_SERVICE_URL")
+	if deckServiceURL == "" {
+		deckServiceURL = "http://deck-service:8005"
 	}
 
-	deckCards := []int32{1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6}
-	for i := 1; i <= 3; i++ {
-		result, err := queries.CreateDeck(ctx, db.CreateDeckParams{
-			PlayerID: userID,
-			Name:     fmt.Sprintf("Starter Deck %d", i),
-		})
-		if err != nil {
-			log.Printf("Failed to create starter deck %d for user %d: %v", i, userID, err)
-			continue
-		}
-		deckID, _ := result.LastInsertId()
-		for pos, cardID := range deckCards {
-			if err := queries.InsertDeckCard(ctx, db.InsertDeckCardParams{
-				DeckID:   int32(deckID),
-				CardID:   cardID,
-				Position: int32(pos),
-			}); err != nil {
-				log.Printf("Failed to insert card %d into starter deck %d: %v", cardID, deckID, err)
-			}
-		}
+	body, _ := json.Marshal(map[string]int64{"user_id": userID})
+	resp, err := http.Post(deckServiceURL+"/internal/starter-content", "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("Failed to call deck service for starter content (user %d): %v", userID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		log.Printf("Deck service returned %d for starter content (user %d)", resp.StatusCode, userID)
 	}
 }
 
@@ -150,7 +134,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	userID, _ := result.LastInsertId()
 
-	go giveStarterContent(context.Background(), userID)
+	go giveStarterContent(userID)
 
 	respondJSON(w, map[string]any{
 		"user_id":  userID,

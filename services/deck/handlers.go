@@ -763,3 +763,74 @@ func handleGetActiveDeck(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{"active_deck_id": *activeDeckID})
 }
+
+// Internal endpoint — called by auth service after user registration
+type InitStarterContentRequest struct {
+	UserID int64 `json:"user_id"`
+}
+
+var starterCardIDs = []int32{1, 2, 3, 4, 5, 6}
+
+func handleInitStarterContent(w http.ResponseWriter, r *http.Request) {
+	var req InitStarterContentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.UserID == 0 {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+		return
+	}
+
+	ctx := r.Context()
+
+	// Give 2 copies of each starter card
+	for _, cardID := range starterCardIDs {
+		queries.UpsertPlayerCard(ctx, db.UpsertPlayerCardParams{
+			PlayerID: req.UserID,
+			CardID:   cardID,
+		})
+		// Second copy
+		queries.UpsertPlayerCard(ctx, db.UpsertPlayerCardParams{
+			PlayerID: req.UserID,
+			CardID:   cardID,
+		})
+	}
+
+	// Create 3 starter decks
+	deckCards := []int32{1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6}
+	var firstDeckID int32
+	for i := 1; i <= 3; i++ {
+		result, err := queries.CreateDeck(ctx, db.CreateDeckParams{
+			PlayerID: req.UserID,
+			Name:     fmt.Sprintf("Starter Deck %d", i),
+		})
+		if err != nil {
+			continue
+		}
+		deckID, _ := result.LastInsertId()
+		if i == 1 {
+			firstDeckID = int32(deckID)
+		}
+		for pos, cardID := range deckCards {
+			queries.InsertDeckCard(ctx, db.InsertDeckCardParams{
+				DeckID:   int32(deckID),
+				CardID:   cardID,
+				Position: int32(pos),
+			})
+		}
+	}
+
+	// Set first deck as active
+	if firstDeckID > 0 {
+		queries.SetActiveDeck(ctx, db.SetActiveDeckParams{
+			ActiveDeckID: &firstDeckID,
+			ID:           req.UserID,
+		})
+	}
+
+	respondJSON(w, http.StatusCreated, map[string]interface{}{
+		"message":        "starter content created",
+		"active_deck_id": firstDeckID,
+	})
+}
