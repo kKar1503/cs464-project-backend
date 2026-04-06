@@ -142,7 +142,8 @@ class GamePlayer:
                     continue
                 msg = json.loads(raw)
                 if verbose:
-                    print(f"    {CYAN}[{self.name} recv] {json.dumps(msg, separators=(',', ':'))[:300]}{NC}")
+                    print(f"    {CYAN}[{self.name} recv]{NC}")
+                    print(f"    {json.dumps(msg, indent=2)}")
                 sv = msg.get("state_view")
                 if isinstance(sv, dict):
                     tn = sv.get("tick_number", 0)
