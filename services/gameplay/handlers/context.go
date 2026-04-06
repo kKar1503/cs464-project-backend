@@ -139,7 +139,7 @@ var summonRegistry = map[string]OnSpawn{
 	"bounce":func(summonParam SummonParam) {
 
 	},
-	"elixer_overflow": func(summonParam SummonParam) {
+	"elixir_overflow": func(summonParam SummonParam) {
 
 	},
 	"destroy_enemy_infront": func(summonParam SummonParam) {
@@ -184,7 +184,7 @@ const (
 type Card struct {
 	CardID        int
 	CardName      string
-	ElixerCost    int
+	ElixirCost    int
 	CurrentHealth int
 	MaxHealth     int
 	CardAttack    int
@@ -212,8 +212,8 @@ type HandCardInfo struct {
 }
 
 type GameplayManager interface {
-	GetElixer(playerID int64) int
-	RemoveElixer(playerID int64, amount int)
+	GetElixir(playerID int64) int
+	RemoveElixir(playerID int64, amount int)
 	GetPlayer1ID() int64
 	GetBoard(playerID int64) (yours *[2][3]Card, opponents *[2][3]Card)
 	GetPlayerHealth(playerID int64) (you *int, opponent *int)

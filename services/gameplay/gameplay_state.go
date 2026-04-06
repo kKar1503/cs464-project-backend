@@ -221,11 +221,11 @@ func (gh *GameplayManager) resolveAttack(isPlayer1 bool, row, col int) *AttackEv
 
 func (gh *GameplayManager) PlayCard(playerID int64, card *handlers.Card, row int, col int) error {
 	isPlayer1 := playerID == gh.player1ID
-	costInMilli := card.ElixerCost * MilliElixirPerElixir
+	costInMilli := card.ElixirCost * MilliElixirPerElixir
 
 	if isPlayer1 {
 		if gh.game.MilliElixirPlayer1 < costInMilli {
-			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer1/MilliElixirPerElixir, card.ElixerCost)
+			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer1/MilliElixirPerElixir, card.ElixirCost)
 		}
 		if gh.game.BoardPlayer1[row][col].CardID != 0 {
 			return fmt.Errorf("board position [%d][%d] is occupied", row, col)
@@ -234,7 +234,7 @@ func (gh *GameplayManager) PlayCard(playerID int64, card *handlers.Card, row int
 		gh.game.MilliElixirPlayer1 -= costInMilli
 	} else {
 		if gh.game.MilliElixirPlayer2 < costInMilli {
-			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer2/MilliElixirPerElixir, card.ElixerCost)
+			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer2/MilliElixirPerElixir, card.ElixirCost)
 		}
 		if gh.game.BoardPlayer2[row][col].CardID != 0 {
 			return fmt.Errorf("board position [%d][%d] is occupied", row, col)

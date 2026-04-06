@@ -179,12 +179,12 @@ type GameplayAdapter struct {
 	gameplay *GameplayManager
 }
 
-func (gpa *GameplayAdapter) GetElixer(playerID int64) int {
+func (gpa *GameplayAdapter) GetElixir(playerID int64) int {
 	return gpa.gameplay.GetElixirDisplay(playerID)
 }
 
-func (gpa *GameplayAdapter) RemoveElixer(playerID int64, elixerToRemove int) {
-	milliToRemove := elixerToRemove * MilliElixirPerElixir
+func (gpa *GameplayAdapter) RemoveElixir(playerID int64, elixirToRemove int) {
+	milliToRemove := elixirToRemove * MilliElixirPerElixir
 	if playerID == gpa.gameplay.player1ID {
 		gpa.gameplay.game.MilliElixirPlayer1 -= milliToRemove
 	} else {

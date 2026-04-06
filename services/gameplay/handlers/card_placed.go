@@ -39,15 +39,15 @@ func HandleCardPlaced(ctx HandlerContext, msg *ClientMessage) error {
 	}
 
 	// Check elixir
-	if gm.GetElixer(playerID) < handCard.ManaCost {
-		return fmt.Errorf("not enough elixir: have %d, need %d", gm.GetElixer(playerID), handCard.ManaCost)
+	if gm.GetElixir(playerID) < handCard.ManaCost {
+		return fmt.Errorf("not enough elixir: have %d, need %d", gm.GetElixir(playerID), handCard.ManaCost)
 	}
 
 	// Build the board card with charge timer
 	card := &Card{
 		CardID:               handCard.CardID,
 		CardName:             handCard.CardName,
-		ElixerCost:           handCard.ManaCost,
+		ElixirCost:           handCard.ManaCost,
 		CurrentHealth:        handCard.HP,
 		MaxHealth:            handCard.HP,
 		CardAttack:           handCard.Attack,

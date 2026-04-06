@@ -193,7 +193,7 @@ func TestPlayCardDeductsElixir(t *testing.T) {
 
 	card := &handlers.Card{
 		CardID:     1,
-		ElixerCost: 2,
+		ElixirCost: 2,
 	}
 
 	err := gm.PlayCard(1, card, 0, 0)
@@ -214,7 +214,7 @@ func TestPlayCardNotEnoughElixir(t *testing.T) {
 
 	card := &handlers.Card{
 		CardID:     1,
-		ElixerCost: 5, // costs more than round 1 cap of 3
+		ElixirCost: 5, // costs more than round 1 cap of 3
 	}
 
 	err := gm.PlayCard(1, card, 0, 0)
