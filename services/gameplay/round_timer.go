@@ -7,7 +7,9 @@ import (
 )
 
 const (
-	// RoundDuration is how long each round lasts (both players act simultaneously)
+	// PreTurnDuration is how long the pre-turn draw phase lasts
+	PreTurnDuration = 10 * time.Second
+	// RoundDuration is how long each active round lasts (both players act simultaneously)
 	RoundDuration = 30 * time.Second
 )
 
@@ -27,6 +29,37 @@ func NewRoundTimer(session *GameSession) *RoundTimer {
 		session: session,
 		stopped: true,
 	}
+}
+
+// StartPreTurn starts the 10s pre-turn timer. When it expires, fires EventPreTurnEnd.
+func (rt *RoundTimer) StartPreTurn() {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	if rt.timer != nil {
+		rt.timer.Stop()
+	}
+
+	rt.stopped = false
+	rt.timer = time.AfterFunc(PreTurnDuration, func() {
+		rt.mu.Lock()
+		if rt.stopped {
+			rt.mu.Unlock()
+			return
+		}
+		rt.stopped = true
+		rt.mu.Unlock()
+
+		log.Printf("Pre-turn ended in session %s", rt.session.State.SessionID)
+		if rt.session.GameLoop != nil {
+			rt.session.GameLoop.QueueEvent(GameEvent{
+				Type:      EventPreTurnEnd,
+				Timestamp: time.Now(),
+			})
+		}
+	})
+
+	log.Printf("Pre-turn started in session %s (%v duration)", rt.session.State.SessionID, PreTurnDuration)
 }
 
 // StartRound starts the timer for a new round

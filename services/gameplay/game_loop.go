@@ -17,7 +17,8 @@ type EventType int
 
 const (
 	EventClientAction    EventType = iota
-	EventRoundEnd                  // round timer expired
+	EventPreTurnEnd                // pre-turn timer expired → start active phase
+	EventRoundEnd                  // round timer expired → next pre-turn
 	EventPlayerDisconnect
 	EventShutdown
 )
@@ -130,6 +131,8 @@ func (gl *GameLoop) handleEvent(event GameEvent) {
 	switch event.Type {
 	case EventClientAction:
 		gl.handleClientAction(event)
+	case EventPreTurnEnd:
+		gl.handlePreTurnEnd()
 	case EventRoundEnd:
 		gl.handleRoundEnd()
 	case EventPlayerDisconnect:
@@ -184,9 +187,14 @@ func (gl *GameLoop) handleClientAction(event GameEvent) {
 		return
 	}
 
-	// Check if both players have drawn — transition to active phase
-	if gl.session.State.Phase == "BOTH_PLAYERS_DREW" {
-		gl.StartRound()
+	// If JOIN_GAME just set PRE_TURN, start the pre-turn timer and offer cards
+	if string(msg.Action) == "JOIN_GAME" && gl.session.State.Phase == PhasePreTurn {
+		gm := gl.session.GameplayManager
+		gm.OfferCards(gm.player1ID)
+		gm.OfferCards(gm.player2ID)
+		if gl.session.RoundTimer != nil {
+			gl.session.RoundTimer.StartPreTurn()
+		}
 	}
 
 	// Take snapshot
@@ -201,6 +209,28 @@ func (gl *GameLoop) handleClientAction(event GameEvent) {
 	log.Printf("Action %s completed for player %d (tick: %d)", msg.Action, event.PlayerID, gl.tickCount)
 }
 
+// enterPreTurn sets up the pre-turn phase: offers cards, resets draw state, starts 10s timer.
+func (gl *GameLoop) enterPreTurn() {
+	gm := gl.session.GameplayManager
+	gl.session.State.Phase = PhasePreTurn
+	gl.session.State.TurnNumber = gm.game.RoundNumber
+	gl.session.State.LastUpdateAt = time.Now()
+
+	gm.ResetDrawState()
+	gm.OfferCards(gm.player1ID)
+	gm.OfferCards(gm.player2ID)
+
+	if gl.session.RoundTimer != nil {
+		gl.session.RoundTimer.StartPreTurn()
+	}
+}
+
+// handlePreTurnEnd fires when the 10s pre-turn timer expires — transition to active phase
+func (gl *GameLoop) handlePreTurnEnd() {
+	log.Printf("Pre-turn ended, starting active phase in session %s", gl.session.State.SessionID)
+	gl.StartRound()
+}
+
 // handleRoundEnd processes a round ending — advances to next round's pre-turn phase
 func (gl *GameLoop) handleRoundEnd() {
 	log.Printf("Round %d ended in session %s", gl.session.State.TurnNumber, gl.session.State.SessionID)
@@ -209,12 +239,8 @@ func (gl *GameLoop) handleRoundEnd() {
 	gl.session.GameplayManager.AdvanceRound()
 	gl.session.GameplayManager.ResetDrawState()
 
-	// Move to pre-turn phase — offer cards to both players
-	gl.session.State.Phase = PhasePreTurn
-	gl.session.GameplayManager.OfferCards(gl.session.GameplayManager.player1ID)
-	gl.session.GameplayManager.OfferCards(gl.session.GameplayManager.player2ID)
-	gl.session.State.TurnNumber = gl.session.GameplayManager.game.RoundNumber
-	gl.session.State.LastUpdateAt = time.Now()
+	// Move to pre-turn phase — offer cards and start 10s timer
+	gl.enterPreTurn()
 
 	gl.dirty = true
 }
