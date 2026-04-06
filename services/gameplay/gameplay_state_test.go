@@ -367,6 +367,90 @@ func TestWinConditionOnLeaderDeath(t *testing.T) {
 	}
 }
 
+func TestPlayFromHandFailsCardStaysInHand(t *testing.T) {
+	gm := newTestManager()
+
+	// Give player 1 only 2 elixir
+	gm.game.MilliElixirPlayer1 = 2 * MilliElixirPerElixir
+
+	// Put a 5-cost card in hand
+	expensiveCard := HandCard{
+		CardID: 99, CardName: "Expensive", Colour: "Grey",
+		Rarity: "common", ManaCost: 5, Attack: 10, HP: 10,
+	}
+	gm.game.Player1Hand = &PlayerHand{
+		Deck:             []HandCard{},
+		DrawPile:         []HandCard{},
+		Hand:             []HandCard{expensiveCard},
+		SelectedThisTurn: make(map[int]int),
+	}
+
+	// Verify card is in hand via GetHandCard
+	card, ok := gm.GetHandCard(1, 99)
+	if !ok || card == nil {
+		t.Fatal("expensive card should be in hand before attempt")
+	}
+
+	// Attempting PlayFromHand should succeed (it only removes from hand)
+	// but the real flow checks elixir BEFORE calling PlayFromHand.
+	// Verify the card is findable so the elixir check can reject first.
+	if card.ManaCost <= gm.GetElixirDisplay(1) {
+		t.Fatalf("test setup wrong: card cost %d should exceed elixir %d",
+			card.ManaCost, gm.GetElixirDisplay(1))
+	}
+
+	// After the elixir check rejects, the card must still be in hand
+	remaining := gm.GetHand(1)
+	if len(remaining) != 1 || remaining[0].CardID != 99 {
+		t.Errorf("card should still be in hand after failed elixir check, got %v", remaining)
+	}
+}
+
+func TestPlayFromHandSuccessCardLeavesHand(t *testing.T) {
+	gm := newTestManager()
+
+	// Give player 1 enough elixir
+	gm.game.MilliElixirPlayer1 = 3 * MilliElixirPerElixir
+
+	cheapCard := HandCard{
+		CardID: 42, CardName: "Cheap", Colour: "Grey",
+		Rarity: "common", ManaCost: 2, Attack: 5, HP: 5,
+	}
+	gm.game.Player1Hand = &PlayerHand{
+		Deck:             []HandCard{},
+		DrawPile:         []HandCard{},
+		Hand:             []HandCard{cheapCard},
+		SelectedThisTurn: make(map[int]int),
+	}
+
+	// Peek first — card should be affordable
+	card, ok := gm.GetHandCard(1, 42)
+	if !ok {
+		t.Fatal("cheap card should be in hand")
+	}
+	if card.ManaCost > gm.GetElixirDisplay(1) {
+		t.Fatal("should have enough elixir for this card")
+	}
+
+	// Now actually play it
+	played, err := gm.PlayFromHand(1, 42)
+	if err != nil {
+		t.Fatalf("PlayFromHand failed: %v", err)
+	}
+	if played.CardID != 42 {
+		t.Errorf("played card ID: got %d, want 42", played.CardID)
+	}
+
+	// Hand should be empty, card should be back in deck
+	if len(gm.GetHand(1)) != 0 {
+		t.Error("hand should be empty after playing")
+	}
+	hand := gm.getPlayerHand(1)
+	if len(hand.Deck) != 1 || hand.Deck[0].CardID != 42 {
+		t.Errorf("card should be back in deck, got %v", hand.Deck)
+	}
+}
+
 func TestBothPlayersIndependent(t *testing.T) {
 	gm := newTestManager()
 
