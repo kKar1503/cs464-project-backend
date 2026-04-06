@@ -217,12 +217,11 @@ type GameplayManager interface {
 	GetPlayer1ID() int64
 	GetBoard(playerID int64) (yours *[2][3]Card, opponents *[2][3]Card)
 	GetPlayerHealth(playerID int64) (you *int, opponent *int)
-	PlaceCard(playerID int64, card *Card, xPos int, yPos int) error
+	PlaceCard(playerID int64, card *Card, row int, col int) error
 
-	// Hand drawing
-	OfferCards(playerID int64) []HandCardInfo
-	SelectCards(playerID int64, selectedIDs []int) error
-	GetHand(playerID int64) []HandCardInfo
-	RemoveFromHand(playerID int64, cardID int) error
-	MarkPlayerDrew(playerID int64) bool
+	// Draw pile & hand
+	GetDrawPile(playerID int64) []HandCardInfo
+	GetHandCards(playerID int64) []HandCardInfo
+	SelectFromDrawPile(playerID int64, cardIDs []int) error
+	PlayFromHand(playerID int64, cardID int) (*HandCardInfo, error)
 }

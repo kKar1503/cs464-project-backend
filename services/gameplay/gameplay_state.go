@@ -18,13 +18,18 @@ type HandCard struct {
 	HP       int    `json:"hp"`
 }
 
-// PlayerHand tracks the draw state for a single player.
+const (
+	MaxDrawPile   = 8 // max cards in the draw pile
+	DrawPileTopUp = 5 // cards added from deck to draw pile each pre-turn
+	MaxHand       = 4 // max cards in hand
+)
+
+// PlayerHand tracks the three card zones for a single player.
+// Flow: Deck → DrawPile → Hand → Board → back to Deck
 type PlayerHand struct {
-	Deck         []HandCard   `json:"deck"`
-	Remaining    []HandCard   `json:"remaining"`
-	Offered      []HandCard   `json:"offered"`
-	Hand         []HandCard   `json:"hand"`
-	DrawnCardIDs map[int]bool `json:"-"`
+	Deck     []HandCard `json:"deck"`      // the queue — cards cycle back here after being played
+	DrawPile []HandCard `json:"draw_pile"` // cards offered each pre-turn (max 8)
+	Hand     []HandCard `json:"hand"`      // cards selected from draw pile, ready to play (max 4)
 }
 
 const (
@@ -62,10 +67,8 @@ type GameplayState struct {
 	BoardPlayer2       *[2][3]handlers.Card
 	RoundNumber        int
 	ElixirCap          int
-	Player1Hand        *PlayerHand
-	Player2Hand        *PlayerHand
-	Player1DrewThisRound bool
-	Player2DrewThisRound bool
+	Player1Hand *PlayerHand
+	Player2Hand *PlayerHand
 
 	LastAttackLog []AttackEvent // attacks resolved in the most recent tick
 }
@@ -94,8 +97,8 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 			BoardPlayer2:       &boardPlayer2,
 			RoundNumber:        1,
 			ElixirCap:          StartingElixir,
-			Player1Hand:        &PlayerHand{DrawnCardIDs: make(map[int]bool)},
-			Player2Hand:        &PlayerHand{DrawnCardIDs: make(map[int]bool)},
+			Player1Hand:        &PlayerHand{},
+			Player2Hand:        &PlayerHand{},
 		},
 		player1ID: player1ID,
 		player2ID: player2ID,
@@ -137,7 +140,7 @@ func (gh *GameplayManager) TickBoard() bool {
 		}
 	}
 
-	// Clean up dead cards
+	// Clean up dead cards (cards already returned to deck when played)
 	for r := 0; r < 2; r++ {
 		for c := 0; c < 3; c++ {
 			if g.BoardPlayer1[r][c].CardID != 0 && g.BoardPlayer1[r][c].CurrentHealth <= 0 {
@@ -250,113 +253,93 @@ func (gh *GameplayManager) PlayCard(playerID int64, card *handlers.Card, row int
 // Hand / Draw
 // ──────────────────────────────────────────────
 
+// SetPlayerDeck sets and shuffles the deck for a player (called at game start).
 func (gh *GameplayManager) SetPlayerDeck(playerID int64, deck []HandCard) {
 	hand := gh.getPlayerHand(playerID)
-	hand.Deck = deck
-	hand.Remaining = make([]HandCard, len(deck))
-	copy(hand.Remaining, deck)
-}
 
-func (gh *GameplayManager) OfferCards(playerID int64) []HandCard {
-	hand := gh.getPlayerHand(playerID)
-
-	var available []HandCard
-	for _, c := range hand.Remaining {
-		if !hand.DrawnCardIDs[c.CardID] {
-			available = append(available, c)
-		}
-	}
-
-	shuffled := make([]HandCard, len(available))
-	copy(shuffled, available)
+	// Shuffle the deck
+	shuffled := make([]HandCard, len(deck))
+	copy(shuffled, deck)
 	for i := len(shuffled) - 1; i > 0; i-- {
 		j := int(time.Now().UnixNano()) % (i + 1)
 		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
 	}
-
-	offerCount := 5
-	if len(shuffled) < offerCount {
-		offerCount = len(shuffled)
-	}
-	hand.Offered = shuffled[:offerCount]
-	return hand.Offered
+	hand.Deck = shuffled
 }
 
-func (gh *GameplayManager) SelectCards(playerID int64, selectedIDs []int) error {
+// TopUpDrawPile moves up to DrawPileTopUp (5) cards from the front of the deck
+// to the draw pile, as long as the draw pile hasn't reached MaxDrawPile (8).
+// Called at the start of each pre-turn phase.
+func (gh *GameplayManager) TopUpDrawPile(playerID int64) {
 	hand := gh.getPlayerHand(playerID)
 
-	if len(selectedIDs) > 4 {
-		return fmt.Errorf("can only select up to 4 cards")
-	}
-	if len(selectedIDs) == 0 {
-		return nil
+	space := MaxDrawPile - len(hand.DrawPile)
+	if space <= 0 {
+		return // draw pile is full
 	}
 
-	offeredMap := make(map[int]HandCard)
-	for _, c := range hand.Offered {
-		offeredMap[c.CardID] = c
+	toAdd := DrawPileTopUp
+	if toAdd > space {
+		toAdd = space
+	}
+	if toAdd > len(hand.Deck) {
+		toAdd = len(hand.Deck)
 	}
 
-	var selected []HandCard
-	for _, id := range selectedIDs {
-		card, ok := offeredMap[id]
-		if !ok {
-			return fmt.Errorf("card %d was not offered", id)
+	hand.DrawPile = append(hand.DrawPile, hand.Deck[:toAdd]...)
+	hand.Deck = hand.Deck[toAdd:]
+}
+
+// SelectFromDrawPile moves cards from the draw pile to hand during pre-turn.
+// Player picks up to MaxHand (4) cards from the draw pile.
+func (gh *GameplayManager) SelectFromDrawPile(playerID int64, cardIDs []int) error {
+	hand := gh.getPlayerHand(playerID)
+
+	if len(cardIDs) > MaxHand-len(hand.Hand) {
+		return fmt.Errorf("can only pick up to %d cards (hand has %d/%d)", MaxHand-len(hand.Hand), len(hand.Hand), MaxHand)
+	}
+
+	for _, id := range cardIDs {
+		found := false
+		for i, c := range hand.DrawPile {
+			if c.CardID == id {
+				hand.Hand = append(hand.Hand, c)
+				hand.DrawPile = append(hand.DrawPile[:i], hand.DrawPile[i+1:]...)
+				found = true
+				break
+			}
 		}
-		if hand.DrawnCardIDs[id] {
-			return fmt.Errorf("card %d was already drawn in a previous turn", id)
-		}
-		selected = append(selected, card)
-	}
-
-	var requiredColour string
-	for _, c := range selected {
-		if c.Colour == "Grey" || c.Colour == "Colourless" {
-			continue
-		}
-		if requiredColour == "" {
-			requiredColour = c.Colour
-		} else if c.Colour != requiredColour {
-			return fmt.Errorf("can only select 1 colour type per turn (got %s and %s)", requiredColour, c.Colour)
+		if !found {
+			return fmt.Errorf("card %d not in draw pile", id)
 		}
 	}
-
-	for _, c := range selected {
-		hand.Hand = append(hand.Hand, c)
-		hand.DrawnCardIDs[c.CardID] = true
-	}
-
-	hand.Offered = nil
 	return nil
 }
 
-// MarkPlayerDrew marks a player as having completed their draw for this round.
-// Returns true if both players have now drawn (ready to start active phase).
-func (gh *GameplayManager) MarkPlayerDrew(playerID int64) bool {
-	if playerID == gh.player1ID {
-		gh.game.Player1DrewThisRound = true
-	} else {
-		gh.game.Player2DrewThisRound = true
-	}
-	return gh.game.Player1DrewThisRound && gh.game.Player2DrewThisRound
-}
-
-// ResetDrawState resets draw flags for a new round.
-func (gh *GameplayManager) ResetDrawState() {
-	gh.game.Player1DrewThisRound = false
-	gh.game.Player2DrewThisRound = false
-}
-
-// RemoveFromHand removes the first instance of a card from the player's hand.
-func (gh *GameplayManager) RemoveFromHand(playerID int64, cardID int) error {
+// PlayFromHand removes a card from the hand (when played onto the board).
+// The card goes to the board AND immediately back to the deck.
+func (gh *GameplayManager) PlayFromHand(playerID int64, cardID int) (*HandCard, error) {
 	hand := gh.getPlayerHand(playerID)
 	for i, c := range hand.Hand {
 		if c.CardID == cardID {
+			card := hand.Hand[i]
 			hand.Hand = append(hand.Hand[:i], hand.Hand[i+1:]...)
-			return nil
+			// Immediately return to back of deck
+			hand.Deck = append(hand.Deck, card)
+			return &card, nil
 		}
 	}
-	return fmt.Errorf("card %d not found in hand", cardID)
+	return nil, fmt.Errorf("card %d not in hand", cardID)
+}
+
+// GetDrawPile returns the current draw pile for a player.
+func (gh *GameplayManager) GetDrawPile(playerID int64) []HandCard {
+	return gh.getPlayerHand(playerID).DrawPile
+}
+
+// GetHand returns the current hand for a player.
+func (gh *GameplayManager) GetHand(playerID int64) []HandCard {
+	return gh.getPlayerHand(playerID).Hand
 }
 
 func (gh *GameplayManager) GetPlayerHandState(playerID int64) *PlayerHand {

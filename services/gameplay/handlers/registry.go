@@ -19,8 +19,7 @@ func GetActionHandler(action string) ActionHandler {
 // Initialize all action handlers
 func init() {
 	RegisterActionHandler("CARD_PLACED", HandleCardPlaced)
-	RegisterActionHandler("DRAW_CARDS", HandleDrawCards)
-
+	RegisterActionHandler("SELECT_CARDS", HandleSelectCards)
 	RegisterActionHandler("JOIN_GAME", HandleJoinGame)
 	RegisterActionHandler("CLICK", HandleClick)
 	RegisterActionHandler("SURRENDER", HandleSurrender)

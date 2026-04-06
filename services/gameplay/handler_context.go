@@ -192,16 +192,38 @@ func (gpa *GameplayAdapter) RemoveElixir(playerID int64, elixirToRemove int) {
 	}
 }
 
-func (gpa *GameplayAdapter) PlaceCard(playerID int64, card *handlers.Card, xPos int, yPos int) error {
-	return gpa.gameplay.PlayCard(playerID, card, xPos, yPos)
+func (gpa *GameplayAdapter) PlaceCard(playerID int64, card *handlers.Card, row int, col int) error {
+	return gpa.gameplay.PlayCard(playerID, card, row, col)
 }
 
 func (gpa *GameplayAdapter) GetPlayer1ID() int64 {
 	return gpa.gameplay.player1ID
 }
 
-func (gpa *GameplayAdapter) OfferCards(playerID int64) []handlers.HandCardInfo {
-	cards := gpa.gameplay.OfferCards(playerID)
+func (gpa *GameplayAdapter) GetDrawPile(playerID int64) []handlers.HandCardInfo {
+	return handCardsToInfo(gpa.gameplay.GetDrawPile(playerID))
+}
+
+func (gpa *GameplayAdapter) GetHandCards(playerID int64) []handlers.HandCardInfo {
+	return handCardsToInfo(gpa.gameplay.GetHand(playerID))
+}
+
+func (gpa *GameplayAdapter) SelectFromDrawPile(playerID int64, cardIDs []int) error {
+	return gpa.gameplay.SelectFromDrawPile(playerID, cardIDs)
+}
+
+func (gpa *GameplayAdapter) PlayFromHand(playerID int64, cardID int) (*handlers.HandCardInfo, error) {
+	card, err := gpa.gameplay.PlayFromHand(playerID, cardID)
+	if err != nil {
+		return nil, err
+	}
+	return &handlers.HandCardInfo{
+		CardID: card.CardID, CardName: card.CardName, Colour: card.Colour,
+		Rarity: card.Rarity, ManaCost: card.ManaCost, Attack: card.Attack, HP: card.HP,
+	}, nil
+}
+
+func handCardsToInfo(cards []HandCard) []handlers.HandCardInfo {
 	result := make([]handlers.HandCardInfo, len(cards))
 	for i, c := range cards {
 		result[i] = handlers.HandCardInfo{
@@ -210,30 +232,6 @@ func (gpa *GameplayAdapter) OfferCards(playerID int64) []handlers.HandCardInfo {
 		}
 	}
 	return result
-}
-
-func (gpa *GameplayAdapter) SelectCards(playerID int64, selectedIDs []int) error {
-	return gpa.gameplay.SelectCards(playerID, selectedIDs)
-}
-
-func (gpa *GameplayAdapter) GetHand(playerID int64) []handlers.HandCardInfo {
-	hand := gpa.gameplay.GetPlayerHandState(playerID)
-	result := make([]handlers.HandCardInfo, len(hand.Hand))
-	for i, c := range hand.Hand {
-		result[i] = handlers.HandCardInfo{
-			CardID: c.CardID, CardName: c.CardName, Colour: c.Colour,
-			Rarity: c.Rarity, ManaCost: c.ManaCost, Attack: c.Attack, HP: c.HP,
-		}
-	}
-	return result
-}
-
-func (gpa *GameplayAdapter) RemoveFromHand(playerID int64, cardID int) error {
-	return gpa.gameplay.RemoveFromHand(playerID, cardID)
-}
-
-func (gpa *GameplayAdapter) MarkPlayerDrew(playerID int64) bool {
-	return gpa.gameplay.MarkPlayerDrew(playerID)
 }
 
 func (gpa *GameplayAdapter) GetBoard(playerID int64) (yours *[2][3]handlers.Card, opponents *[2][3]handlers.Card) {

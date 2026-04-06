@@ -187,11 +187,11 @@ func (gl *GameLoop) handleClientAction(event GameEvent) {
 		return
 	}
 
-	// If JOIN_GAME just set PRE_TURN, start the pre-turn timer and offer cards
+	// If JOIN_GAME just set PRE_TURN, top up draw piles and start the pre-turn timer
 	if string(msg.Action) == "JOIN_GAME" && gl.session.State.Phase == PhasePreTurn {
 		gm := gl.session.GameplayManager
-		gm.OfferCards(gm.player1ID)
-		gm.OfferCards(gm.player2ID)
+		gm.TopUpDrawPile(gm.player1ID)
+		gm.TopUpDrawPile(gm.player2ID)
 		if gl.session.RoundTimer != nil {
 			gl.session.RoundTimer.StartPreTurn()
 		}
@@ -209,16 +209,16 @@ func (gl *GameLoop) handleClientAction(event GameEvent) {
 	log.Printf("Action %s completed for player %d (tick: %d)", msg.Action, event.PlayerID, gl.tickCount)
 }
 
-// enterPreTurn sets up the pre-turn phase: offers cards, resets draw state, starts 10s timer.
+// enterPreTurn sets up the pre-turn phase: tops up draw piles, starts 10s timer.
 func (gl *GameLoop) enterPreTurn() {
 	gm := gl.session.GameplayManager
 	gl.session.State.Phase = PhasePreTurn
 	gl.session.State.TurnNumber = gm.game.RoundNumber
 	gl.session.State.LastUpdateAt = time.Now()
 
-	gm.ResetDrawState()
-	gm.OfferCards(gm.player1ID)
-	gm.OfferCards(gm.player2ID)
+	// Top up both players' draw piles from their decks
+	gm.TopUpDrawPile(gm.player1ID)
+	gm.TopUpDrawPile(gm.player2ID)
 
 	if gl.session.RoundTimer != nil {
 		gl.session.RoundTimer.StartPreTurn()
@@ -237,7 +237,6 @@ func (gl *GameLoop) handleRoundEnd() {
 
 	// Advance round in gameplay manager (increases elixir cap)
 	gl.session.GameplayManager.AdvanceRound()
-	gl.session.GameplayManager.ResetDrawState()
 
 	// Move to pre-turn phase — offer cards and start 10s timer
 	gl.enterPreTurn()
