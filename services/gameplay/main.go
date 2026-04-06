@@ -191,6 +191,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	if created {
 		log.Printf("Created new game session %s for players %d and %d", sessionID, player1ID, player2ID)
+		// Load both players' active decks from deck service
+		loadPlayerDeck(session, player1ID)
+		loadPlayerDeck(session, player2ID)
 	}
 
 	// Upgrade HTTP connection to WebSocket
@@ -217,6 +220,77 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		StateHashAfter: 0, // First connection, hash will be sent in response
 		SequenceNumber: session.State.GetPlayerSequence(playerID),
 	})
+}
+
+// affiliationToColour maps affiliation IDs to colour names.
+var affiliationToColour = map[int]string{
+	0: "Grey",
+	1: "Grey",
+	2: "Red",
+	3: "Blue",
+	4: "Green",
+	5: "Purple",
+	6: "Yellow",
+}
+
+// activeDeckResponse is the JSON response from the deck service's internal endpoint.
+type activeDeckResponse struct {
+	DeckID int `json:"deck_id"`
+	Cards  []struct {
+		CardID      int    `json:"card_id"`
+		CardName    string `json:"card_name"`
+		Affiliation int    `json:"affiliation"`
+		Rarity      string `json:"rarity"`
+		ManaCost    int    `json:"mana_cost"`
+		Attack      int    `json:"attack"`
+		HP          int    `json:"hp"`
+	} `json:"cards"`
+}
+
+// loadPlayerDeck calls the deck service to get a player's active deck and loads it into the session.
+func loadPlayerDeck(session *GameSession, userID int64) {
+	deckServiceURL := os.Getenv("DECK_SERVICE_URL")
+	if deckServiceURL == "" {
+		deckServiceURL = "http://deck-service:8005"
+	}
+
+	resp, err := http.Get(fmt.Sprintf("%s/internal/active-deck?user_id=%d", deckServiceURL, userID))
+	if err != nil {
+		log.Printf("Failed to call deck service for player %d: %v", userID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Deck service returned %d for player %d active deck", resp.StatusCode, userID)
+		return
+	}
+
+	var deckResp activeDeckResponse
+	if err := json.NewDecoder(resp.Body).Decode(&deckResp); err != nil {
+		log.Printf("Failed to decode deck response for player %d: %v", userID, err)
+		return
+	}
+
+	var deck []HandCard
+	for _, c := range deckResp.Cards {
+		colour := affiliationToColour[c.Affiliation]
+		if colour == "" {
+			colour = "Grey"
+		}
+		deck = append(deck, HandCard{
+			CardID:   c.CardID,
+			CardName: c.CardName,
+			Colour:   colour,
+			Rarity:   c.Rarity,
+			ManaCost: c.ManaCost,
+			Attack:   c.Attack,
+			HP:       c.HP,
+		})
+	}
+
+	session.GameplayManager.SetPlayerDeck(userID, deck)
+	log.Printf("Loaded deck (id=%d, %d cards) for player %d", deckResp.DeckID, len(deck), userID)
 }
 
 // handleGameStats returns statistics about active games
