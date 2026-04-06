@@ -85,6 +85,7 @@ Move a single card from your hand back to the draw pile. Allows changing your mi
 
 **Errors:**
 - `"can only deselect cards during PRE_TURN phase"` — wrong phase
+- `"card N cannot be deselected (not selected this turn)"` — card was in hand from a previous round
 - `"card N not in hand"` — card ID not found in your hand
 
 ---

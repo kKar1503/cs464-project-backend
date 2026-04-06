@@ -247,11 +247,17 @@ func (gl *GameLoop) handleRoundEnd() {
 // StartRound transitions from pre-turn to active and starts the round timer.
 // Called after both players have completed their draw phase.
 func (gl *GameLoop) StartRound() {
+	gm := gl.session.GameplayManager
+
+	// Clear per-turn selection tracking — cards selected this pre-turn are now locked in hand
+	gm.ClearSelectedThisTurn(gm.player1ID)
+	gm.ClearSelectedThisTurn(gm.player2ID)
+
 	gl.session.State.Phase = PhaseActive
 	gl.session.State.LastUpdateAt = time.Now()
 
 	if gl.session.RoundTimer != nil {
-		gl.session.RoundTimer.StartRound(gl.session.GameplayManager.game.RoundNumber)
+		gl.session.RoundTimer.StartRound(gm.game.RoundNumber)
 	}
 
 	gl.dirty = true
