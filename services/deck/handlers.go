@@ -525,7 +525,6 @@ type CardResponse struct {
 	Affiliation int    `json:"affiliation"`
 	Rarity      string `json:"rarity"`
 	ManaCost    int    `json:"mana_cost"`
-	MaxLevel    int    `json:"max_level"`
 	Description string `json:"description"`
 	IconURL     string `json:"icon_url"`
 }
@@ -569,7 +568,6 @@ func handleGetAllCards(w http.ResponseWriter, r *http.Request) {
 			Affiliation: int(c.Affiliation),
 			Rarity:      c.Rarity,
 			ManaCost:    int(c.ManaCost),
-			MaxLevel:    int(c.MaxLevel),
 			Description: c.Description,
 			IconURL:     c.IconUrl,
 		})
@@ -584,7 +582,6 @@ type PlayerCardResponse struct {
 	Affiliation int    `json:"affiliation"`
 	Rarity      string `json:"rarity"`
 	ManaCost    int    `json:"mana_cost"`
-	MaxLevel    int    `json:"max_level"`
 	Description string `json:"description"`
 	IconURL     string `json:"icon_url"`
 	Level       int    `json:"level"`
@@ -616,7 +613,6 @@ func handleGetPlayerCards(w http.ResponseWriter, r *http.Request) {
 			Affiliation: int(c.Affiliation),
 			Rarity:      c.Rarity,
 			ManaCost:    int(c.ManaCost),
-			MaxLevel:    int(c.MaxLevel),
 			Description: c.Description,
 			IconURL:     c.IconUrl,
 			Level:       int(c.Level),
@@ -672,7 +668,6 @@ func handleGetCardsNotInDecks(w http.ResponseWriter, r *http.Request) {
 				Affiliation: int(c.Affiliation),
 				Rarity:      c.Rarity,
 				ManaCost:    int(c.ManaCost),
-				MaxLevel:    int(c.MaxLevel),
 				Description: c.Description,
 				IconURL:     c.IconUrl,
 				Level:       int(c.Level),
@@ -769,7 +764,8 @@ type InitStarterContentRequest struct {
 	UserID int64 `json:"user_id"`
 }
 
-var starterCardIDs = []int32{1, 2, 3, 4, 5, 6}
+// Starter cards: Pig, Farmer, Barbarian, Dwarf, Penguin, Apprentice Magician
+var starterCardIDs = []int32{1, 2, 7, 8, 13, 14}
 
 func handleInitStarterContent(w http.ResponseWriter, r *http.Request) {
 	var req InitStarterContentRequest
@@ -798,7 +794,7 @@ func handleInitStarterContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create 3 starter decks
-	deckCards := []int32{1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6}
+	deckCards := []int32{1, 1, 2, 2, 7, 7, 8, 8, 13, 13, 14, 14}
 	var firstDeckID int32
 	for i := 1; i <= 3; i++ {
 		result, err := queries.CreateDeck(ctx, db.CreateDeckParams{
@@ -835,6 +831,35 @@ func handleInitStarterContent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// affiliationToColour maps affiliation IDs to colour names.
+var affiliationToColour = map[int32]string{
+	1: "Grey",
+	2: "Red",
+	3: "Blue",
+	4: "Green",
+	5: "Purple",
+	6: "Yellow",
+	7: "Colourless",
+}
+
+type AbilityForGame struct {
+	TriggerType string          `json:"trigger_type"`
+	EffectType  string          `json:"effect_type"`
+	Params      json.RawMessage `json:"params"`
+}
+
+type DeckCardForGame struct {
+	CardID    int              `json:"card_id"`
+	CardName  string           `json:"card_name"`
+	Colour    string           `json:"colour"`
+	Rarity    string           `json:"rarity"`
+	ManaCost  int              `json:"mana_cost"`
+	Attack    int              `json:"attack"`
+	HP        int              `json:"hp"`
+	Position  int              `json:"position"`
+	Abilities []AbilityForGame `json:"abilities"`
+}
+
 // Internal endpoint — returns the full active deck for a player (used by gameplay service)
 func handleGetActiveDeckForGame(w http.ResponseWriter, r *http.Request) {
 	userIDStr := r.URL.Query().Get("user_id")
@@ -867,33 +892,113 @@ func handleGetActiveDeckForGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type DeckCardForGame struct {
-		CardID      int    `json:"card_id"`
-		CardName    string `json:"card_name"`
-		Affiliation int    `json:"affiliation"`
-		Rarity      string `json:"rarity"`
-		ManaCost    int    `json:"mana_cost"`
-		Attack      int    `json:"attack"`
-		HP          int    `json:"hp"`
-		Position    int    `json:"position"`
+	// Fetch abilities for all cards in this deck
+	abilities, err := queries.GetAbilitiesForDeck(ctx, *activeDeckID)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load card abilities"})
+		return
+	}
+
+	// Group abilities by card_id
+	abilityMap := make(map[int32][]AbilityForGame)
+	for _, a := range abilities {
+		abilityMap[a.CardID] = append(abilityMap[a.CardID], AbilityForGame{
+			TriggerType: a.TriggerType,
+			EffectType:  a.EffectType,
+			Params:      a.Params,
+		})
 	}
 
 	result := make([]DeckCardForGame, 0, len(cards))
 	for _, c := range cards {
+		colour := affiliationToColour[c.Affiliation]
+		if colour == "" {
+			colour = "Grey"
+		}
+		cardAbilities := abilityMap[c.CardID]
+		if cardAbilities == nil {
+			cardAbilities = []AbilityForGame{}
+		}
 		result = append(result, DeckCardForGame{
-			CardID:      int(c.CardID),
-			CardName:    c.CardName,
-			Affiliation: int(c.Affiliation),
-			Rarity:      c.Rarity,
-			ManaCost:    int(c.ManaCost),
-			Attack:      int(c.Attack),
-			HP:          int(c.Hp),
-			Position:    int(c.Position),
+			CardID:    int(c.CardID),
+			CardName:  c.CardName,
+			Colour:    colour,
+			Rarity:    c.Rarity,
+			ManaCost:  int(c.ManaCost),
+			Attack:    int(c.Attack),
+			HP:        int(c.Hp),
+			Position:  int(c.Position),
+			Abilities: cardAbilities,
 		})
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"deck_id": *activeDeckID,
 		"cards":   result,
+	})
+}
+
+// Internal endpoint — returns ALL card definitions with stats and abilities (used by gameplay service at startup)
+func handleGetAllCardDefinitions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	cards, err := queries.GetAllCardDefinitions(ctx)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load card definitions"})
+		return
+	}
+
+	abilities, err := queries.GetAllCardAbilities(ctx)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load card abilities"})
+		return
+	}
+
+	// Group abilities by card_id
+	abilityMap := make(map[int32][]AbilityForGame)
+	for _, a := range abilities {
+		abilityMap[a.CardID] = append(abilityMap[a.CardID], AbilityForGame{
+			TriggerType: a.TriggerType,
+			EffectType:  a.EffectType,
+			Params:      a.Params,
+		})
+	}
+
+	type CardDefinitionResponse struct {
+		CardID    int              `json:"card_id"`
+		CardName  string           `json:"card_name"`
+		Colour    string           `json:"colour"`
+		Rarity    string           `json:"rarity"`
+		ManaCost  int              `json:"mana_cost"`
+		Attack    int              `json:"attack"`
+		HP        int              `json:"hp"`
+		Abilities []AbilityForGame `json:"abilities"`
+	}
+
+	result := make([]CardDefinitionResponse, 0, len(cards))
+	for _, c := range cards {
+		colour := affiliationToColour[c.Affiliation]
+		if colour == "" {
+			colour = "Grey"
+		}
+		cardAbilities := abilityMap[c.CardID]
+		if cardAbilities == nil {
+			cardAbilities = []AbilityForGame{}
+		}
+		result = append(result, CardDefinitionResponse{
+			CardID:    int(c.CardID),
+			CardName:  c.CardName,
+			Colour:    colour,
+			Rarity:    c.Rarity,
+			ManaCost:  int(c.ManaCost),
+			Attack:    int(c.Attack),
+			HP:        int(c.Hp),
+			Abilities: cardAbilities,
+		})
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"cards": result,
+		"count": len(result),
 	})
 }

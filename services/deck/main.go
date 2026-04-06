@@ -69,6 +69,7 @@ func main() {
 	// Internal routes (called by other services)
 	mux.HandleFunc("POST /internal/starter-content", handleInitStarterContent)
 	mux.HandleFunc("GET /internal/active-deck", handleGetActiveDeckForGame)
+	mux.HandleFunc("GET /internal/card-definitions", handleGetAllCardDefinitions)
 
 	// Pack routes
 	mux.HandleFunc("POST /packs", handleBuyPack)
