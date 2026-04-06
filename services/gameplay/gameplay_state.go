@@ -45,15 +45,16 @@ const (
 
 // AttackEvent records a single attack resolution for broadcast to clients.
 type AttackEvent struct {
-	AttackerCardID int  `json:"attacker_card_id"`
-	AttackerRow    int  `json:"attacker_row"`
-	AttackerCol    int  `json:"attacker_col"`
-	TargetCardID   int  `json:"target_card_id"`
-	TargetRow      int  `json:"target_row"`
-	TargetCol      int  `json:"target_col"`
-	Damage         int  `json:"damage"`
-	CounterDamage  int  `json:"counter_damage"`
-	TargetIsLeader bool `json:"target_is_leader"`
+	AttackerID     int64 `json:"attacker_id"` // user ID of the player whose card attacked
+	AttackerCardID int   `json:"attacker_card_id"`
+	AttackerRow    int   `json:"attacker_row"`
+	AttackerCol    int   `json:"attacker_col"`
+	TargetCardID   int   `json:"target_card_id"` // 0 if target is leader
+	TargetRow      int   `json:"target_row"`
+	TargetCol      int   `json:"target_col"`
+	Damage         int   `json:"damage"`
+	CounterDamage  int   `json:"counter_damage"` // leader counterattack damage
+	TargetIsLeader bool  `json:"target_is_leader"`
 }
 
 type GameplayState struct {
@@ -185,7 +186,15 @@ func (gh *GameplayManager) resolveAttack(isPlayer1 bool, row, col int) *AttackEv
 
 	damage := attacker.CardAttack
 
+	var attackerUserID int64
+	if isPlayer1 {
+		attackerUserID = gh.player1ID
+	} else {
+		attackerUserID = gh.player2ID
+	}
+
 	event := &AttackEvent{
+		AttackerID:     attackerUserID,
 		AttackerCardID: attacker.CardID,
 		AttackerRow:    row,
 		AttackerCol:    col,
