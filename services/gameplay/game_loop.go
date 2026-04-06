@@ -331,7 +331,7 @@ type TickUpdateParams struct {
 	Phase       string           `json:"phase"`
 	RoundNumber int              `json:"round_number"`
 	WinnerID    int              `json:"winner_id,omitempty"`
-	AttackLog   []AttackEvent    `json:"attack_log,omitempty"`
+	CombatLog   []CombatEvent    `json:"combat_log,omitempty"`
 }
 
 func handCardsToView(cards []HandCard) []HandCardView {
@@ -394,7 +394,7 @@ func (gl *GameLoop) broadcastTickUpdate() {
 			Phase:       string(gl.session.State.Phase),
 			RoundNumber: g.RoundNumber,
 			WinnerID:    int(gl.session.State.WinnerID),
-			AttackLog:   g.LastAttackLog,
+			CombatLog:   g.CombatLog,
 		})
 	}
 
@@ -416,7 +416,7 @@ func (gl *GameLoop) broadcastTickUpdate() {
 			Phase:       string(gl.session.State.Phase),
 			RoundNumber: g.RoundNumber,
 			WinnerID:    int(gl.session.State.WinnerID),
-			AttackLog:   g.LastAttackLog,
+			CombatLog:   g.CombatLog,
 		})
 	}
 }

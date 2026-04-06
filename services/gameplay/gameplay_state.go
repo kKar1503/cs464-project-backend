@@ -43,18 +43,46 @@ const (
 	LeaderAttack = 10 // leader counterattack damage
 )
 
-// AttackEvent records a single attack resolution for broadcast to clients.
-type AttackEvent struct {
-	AttackerID     int64 `json:"attacker_id"` // user ID of the player whose card attacked
-	AttackerCardID int   `json:"attacker_card_id"`
-	AttackerRow    int   `json:"attacker_row"`
-	AttackerCol    int   `json:"attacker_col"`
-	TargetCardID   int   `json:"target_card_id"` // 0 if target is leader
-	TargetRow      int   `json:"target_row"`
-	TargetCol      int   `json:"target_col"`
-	Damage         int   `json:"damage"`
-	CounterDamage  int   `json:"counter_damage"` // leader counterattack damage
-	TargetIsLeader bool  `json:"target_is_leader"`
+// CombatEventType represents the kind of combat event.
+type CombatEventType string
+
+const (
+	CombatEventAttack        CombatEventType = "attack"
+	CombatEventCounterAttack CombatEventType = "counter_attack"
+	CombatEventSummonEffect  CombatEventType = "summon_effect"
+	CombatEventOnAttack      CombatEventType = "on_attack"
+	CombatEventOnDamaged     CombatEventType = "on_damaged"
+	CombatEventOnDeath       CombatEventType = "on_death"
+	CombatEventBuff          CombatEventType = "buff"
+	CombatEventDebuff        CombatEventType = "debuff"
+	CombatEventHeal          CombatEventType = "heal"
+	CombatEventCardDeath     CombatEventType = "card_death"
+	CombatEventTransform     CombatEventType = "transform"
+	CombatEventBounce        CombatEventType = "bounce"
+	CombatEventSummon        CombatEventType = "summon"
+)
+
+// CombatEvent records a single combat-related event for broadcast to clients.
+type CombatEvent struct {
+	Type CombatEventType `json:"type"`
+
+	// Who triggered this event
+	SourcePlayerID int64 `json:"source_player_id,omitempty"` // user ID of the player who owns the source
+	SourceCardID   int   `json:"source_card_id,omitempty"`
+	SourceRow      int   `json:"source_row,omitempty"`
+	SourceCol      int   `json:"source_col,omitempty"`
+
+	// Who is affected
+	TargetCardID   int  `json:"target_card_id,omitempty"` // 0 if target is leader
+	TargetRow      int  `json:"target_row,omitempty"`
+	TargetCol      int  `json:"target_col,omitempty"`
+	TargetIsLeader bool `json:"target_is_leader,omitempty"`
+
+	// Values
+	Value    int    `json:"value,omitempty"`    // damage dealt, HP healed, buff amount, etc.
+	ValueHP  int    `json:"value_hp,omitempty"` // for buffs that modify both atk and hp
+	CardName string `json:"card_name,omitempty"` // for context (e.g. "Pig transformed into Technoblade")
+	Message  string `json:"message,omitempty"`   // human-readable description
 }
 
 type GameplayState struct {
@@ -72,7 +100,7 @@ type GameplayState struct {
 	Player1Hand *PlayerHand
 	Player2Hand *PlayerHand
 
-	LastAttackLog []AttackEvent // attacks resolved in the most recent tick
+	CombatLog []CombatEvent // attacks resolved in the most recent tick
 }
 
 // GameplayManager manages gameplay state. All methods are called from the
@@ -116,7 +144,7 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 func (gh *GameplayManager) TickBoard() bool {
 	changed := false
 	g := gh.game
-	g.LastAttackLog = nil
+	g.CombatLog = nil
 
 	// Tick charge timers and resolve attacks instantly when charged
 	for r := 0; r < 2; r++ {
@@ -126,7 +154,7 @@ func (gh *GameplayManager) TickBoard() bool {
 				changed = true
 				if g.BoardPlayer1[r][c].ChargeTicksRemaining <= 0 {
 					if event := gh.resolveAttack(true, r, c); event != nil {
-						g.LastAttackLog = append(g.LastAttackLog, *event)
+						g.CombatLog = append(g.CombatLog, event...)
 					}
 				}
 			}
@@ -135,7 +163,7 @@ func (gh *GameplayManager) TickBoard() bool {
 				changed = true
 				if g.BoardPlayer2[r][c].ChargeTicksRemaining <= 0 {
 					if event := gh.resolveAttack(false, r, c); event != nil {
-						g.LastAttackLog = append(g.LastAttackLog, *event)
+						g.CombatLog = append(g.CombatLog, event...)
 					}
 				}
 			}
@@ -160,7 +188,7 @@ func (gh *GameplayManager) TickBoard() bool {
 }
 
 // resolveAttack resolves a single attack instantly when a card's charge completes.
-func (gh *GameplayManager) resolveAttack(isPlayer1 bool, row, col int) *AttackEvent {
+func (gh *GameplayManager) resolveAttack(isPlayer1 bool, row, col int) []CombatEvent {
 	g := gh.game
 
 	var attackerBoard, defenderBoard *[2][3]handlers.Card
@@ -186,46 +214,73 @@ func (gh *GameplayManager) resolveAttack(isPlayer1 bool, row, col int) *AttackEv
 
 	damage := attacker.CardAttack
 
-	var attackerUserID int64
+	var sourcePlayerID int64
 	if isPlayer1 {
-		attackerUserID = gh.player1ID
+		sourcePlayerID = gh.player1ID
 	} else {
-		attackerUserID = gh.player2ID
+		sourcePlayerID = gh.player2ID
 	}
 
-	event := &AttackEvent{
-		AttackerID:     attackerUserID,
-		AttackerCardID: attacker.CardID,
-		AttackerRow:    row,
-		AttackerCol:    col,
-		Damage:         damage,
-	}
+	var events []CombatEvent
 
 	// Find target: front row first, then back row, then leader
 	if defenderBoard[0][col].CardID != 0 {
 		target := &defenderBoard[0][col]
 		target.CurrentHealth -= damage
-		event.TargetCardID = target.CardID
-		event.TargetRow = 0
-		event.TargetCol = col
+		events = append(events, CombatEvent{
+			Type:           CombatEventAttack,
+			SourcePlayerID: sourcePlayerID,
+			SourceCardID:   attacker.CardID,
+			SourceRow:      row,
+			SourceCol:      col,
+			TargetCardID:   target.CardID,
+			TargetRow:      0,
+			TargetCol:      col,
+			Value:          damage,
+		})
 	} else if defenderBoard[1][col].CardID != 0 {
 		target := &defenderBoard[1][col]
 		target.CurrentHealth -= damage
-		event.TargetCardID = target.CardID
-		event.TargetRow = 1
-		event.TargetCol = col
+		events = append(events, CombatEvent{
+			Type:           CombatEventAttack,
+			SourcePlayerID: sourcePlayerID,
+			SourceCardID:   attacker.CardID,
+			SourceRow:      row,
+			SourceCol:      col,
+			TargetCardID:   target.CardID,
+			TargetRow:      1,
+			TargetCol:      col,
+			Value:          damage,
+		})
 	} else {
 		*defenderHealth -= damage
-		event.TargetIsLeader = true
+		events = append(events, CombatEvent{
+			Type:           CombatEventAttack,
+			SourcePlayerID: sourcePlayerID,
+			SourceCardID:   attacker.CardID,
+			SourceRow:      row,
+			SourceCol:      col,
+			TargetIsLeader: true,
+			Value:          damage,
+		})
+		// Leader counterattack
 		attacker.CurrentHealth -= defenderLeaderAtk
-		event.CounterDamage = defenderLeaderAtk
+		events = append(events, CombatEvent{
+			Type:           CombatEventCounterAttack,
+			TargetCardID:   attacker.CardID,
+			TargetRow:      row,
+			TargetCol:      col,
+			TargetIsLeader: false,
+			Value:          defenderLeaderAtk,
+			Message:        "Leader counterattack",
+		})
 	}
 
 	// Reset charge timer immediately — next attack cycle starts now
 	attacker.ChargeTicksRemaining = handlers.ChargeTicksTotal
 	attacker.IsCharging = true
 
-	return event
+	return events
 }
 
 // ──────────────────────────────────────────────

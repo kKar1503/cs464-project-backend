@@ -209,7 +209,7 @@ Sent every 250ms (4 times per second) when the game state changes. This is the p
 | `phase` | string | Current game phase (see Phases below) |
 | `round_number` | int | Current round number |
 | `winner_id` | int | Player ID of the winner (`1` or `2`). `0` if game is not over. |
-| `attack_log` | AttackEvent[] | Attacks that resolved this tick. Empty on most ticks. |
+| `combat_log` | CombatEvent[] | Combat events that occurred this tick (attacks, counters, effects, deaths). Empty on most ticks. |
 
 ---
 
@@ -308,37 +308,85 @@ A card in the draw pile or hand.
 
 ---
 
-### AttackEvent
+### CombatEvent
 
-An attack that resolved this tick. Only present in ticks where attacks happened.
+A combat-related event that occurred this tick. Multiple events can occur per tick. Only present in ticks where combat happened.
 
+**Example — attack hitting leader with counterattack:**
 ```json
-{
-  "attacker_id": 12345,
-  "attacker_card_id": 3,
-  "attacker_row": 0,
-  "attacker_col": 1,
-  "target_card_id": 7,
-  "target_row": 0,
-  "target_col": 1,
-  "damage": 10,
-  "counter_damage": 0,
-  "target_is_leader": false
-}
+[
+  {
+    "type": "attack",
+    "source_player_id": 12345,
+    "source_card_id": 3,
+    "source_row": 0,
+    "source_col": 1,
+    "target_is_leader": true,
+    "value": 10
+  },
+  {
+    "type": "counter_attack",
+    "target_card_id": 3,
+    "target_row": 0,
+    "target_col": 1,
+    "value": 10,
+    "message": "Leader counterattack"
+  }
+]
+```
+
+**Example — attack hitting an enemy card:**
+```json
+[
+  {
+    "type": "attack",
+    "source_player_id": 12345,
+    "source_card_id": 3,
+    "source_row": 0,
+    "source_col": 1,
+    "target_card_id": 7,
+    "target_row": 0,
+    "target_col": 1,
+    "value": 10
+  }
+]
 ```
 
 | Field | Type | Description |
 |---|---|---|
-| `attacker_id` | int | User ID of the player whose card attacked. Compare with your own user ID to determine if it's your attack or the opponent's. |
-| `attacker_card_id` | int | Card ID of the attacking card |
-| `attacker_row` | int | Row of the attacking card on its owner's board |
-| `attacker_col` | int | Column of the attacking card |
-| `target_card_id` | int | Card ID of the target. `0` if the target is the leader. |
-| `target_row` | int | Row of the target card (irrelevant if target is leader) |
+| `type` | string | Event type (see table below) |
+| `source_player_id` | int | User ID of the player who triggered the event. Compare with your user ID to determine friend/foe. |
+| `source_card_id` | int | Card ID that caused the event |
+| `source_row` | int | Row of the source card |
+| `source_col` | int | Column of the source card |
+| `target_card_id` | int | Card ID of the target. `0` if target is leader. |
+| `target_row` | int | Row of the target card |
 | `target_col` | int | Column of the target card |
-| `damage` | int | Damage dealt to the target |
-| `counter_damage` | int | Damage dealt back to the attacker by the leader. `0` if the target was a card (only leaders counterattack). |
-| `target_is_leader` | bool | `true` if the attack hit the leader directly (no cards in the column) |
+| `target_is_leader` | bool | `true` if the target is the leader |
+| `value` | int | Primary value (damage, heal amount, buff amount, etc.) |
+| `value_hp` | int | Secondary value for effects that modify both ATK and HP |
+| `card_name` | string | Card name for context (e.g. transformations) |
+| `message` | string | Human-readable description |
+
+**Event Types:**
+
+| Type | Description |
+|---|---|
+| `attack` | A card auto-attacked a target (card or leader) |
+| `counter_attack` | Leader dealt damage back to an attacking card |
+| `summon_effect` | An effect triggered when a card was placed on the board |
+| `on_attack` | An effect triggered when a card attacked |
+| `on_damaged` | An effect triggered when a card took damage |
+| `on_death` | An effect triggered when a card died |
+| `buff` | A positive stat modification (ATK/HP increase) |
+| `debuff` | A negative stat modification (ATK/HP decrease) |
+| `heal` | HP restored to a card |
+| `card_death` | A card was removed from the board (HP ≤ 0) |
+| `transform` | A card was transformed into another card |
+| `bounce` | A card was returned to the opponent's hand |
+| `summon` | A new card was summoned onto the board by an effect |
+
+Note: Currently only `attack` and `counter_attack` are implemented. Other types are defined for future card effect implementation.
 
 ---
 

@@ -282,16 +282,23 @@ func TestAutoAttackHitsLeader(t *testing.T) {
 		t.Errorf("attacker HP after leader counter: got %d, want 40", attackerHP)
 	}
 
-	// Attack log should have the event
-	if len(gm.game.LastAttackLog) != 1 {
-		t.Fatalf("expected 1 attack event, got %d", len(gm.game.LastAttackLog))
+	// Combat log should have attack + counter_attack
+	if len(gm.game.CombatLog) != 2 {
+		t.Fatalf("expected 2 combat events (attack + counter), got %d", len(gm.game.CombatLog))
 	}
-	event := gm.game.LastAttackLog[0]
-	if !event.TargetIsLeader {
+	attack := gm.game.CombatLog[0]
+	if attack.Type != CombatEventAttack {
+		t.Errorf("first event should be attack, got %s", attack.Type)
+	}
+	if !attack.TargetIsLeader {
 		t.Error("attack should target leader")
 	}
-	if event.CounterDamage != LeaderAttack {
-		t.Errorf("counter damage: got %d, want %d", event.CounterDamage, LeaderAttack)
+	counter := gm.game.CombatLog[1]
+	if counter.Type != CombatEventCounterAttack {
+		t.Errorf("second event should be counter_attack, got %s", counter.Type)
+	}
+	if counter.Value != LeaderAttack {
+		t.Errorf("counter damage: got %d, want %d", counter.Value, LeaderAttack)
 	}
 }
 
@@ -358,9 +365,9 @@ func TestMultipleCardsAttackSameTick(t *testing.T) {
 		t.Errorf("leader HP after both attacks: got %d, want 220", gm.game.Player2Health)
 	}
 
-	// Both should have attack events logged
-	if len(gm.game.LastAttackLog) != 2 {
-		t.Errorf("expected 2 attack events, got %d", len(gm.game.LastAttackLog))
+	// Both attacks hit leader = 4 events (2 attacks + 2 counters)
+	if len(gm.game.CombatLog) != 4 {
+		t.Errorf("expected 4 combat events, got %d", len(gm.game.CombatLog))
 	}
 
 	// Both cards should have restarted charging

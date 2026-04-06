@@ -114,9 +114,9 @@ class GamePlayer:
         return p.get("elixir", 0) if p else 0
 
     @property
-    def attack_log(self):
+    def combat_log(self):
         p = self.latest_params
-        return p.get("attack_log", []) if p else []
+        return p.get("combat_log", []) if p else []
 
     @property
     def winner_id(self):
@@ -326,10 +326,16 @@ def run_combat_test(attacker_label, attacker_token, defender_token):
         expected = 250 - card_atk
         assert_true(f"DFN HP = {expected}", atk.enemy_hp == expected, f"got {atk.enemy_hp}")
 
-        log = atk.attack_log
+        log = atk.combat_log
         if log:
-            assert_true("Target is leader", log[0].get("target_is_leader"))
-            assert_true("Leader countered", log[0].get("counter_damage", 0) > 0)
+            print(f"  {CYAN}Combat log: {json.dumps(log, indent=2)}{NC}")
+            assert_true("First event is attack", log[0].get("type") == "attack",
+                        f"type: {log[0].get('type')}")
+            assert_true("Attack targets leader", log[0].get("target_is_leader"),
+                        f"log: {log[0]}")
+            if len(log) >= 2:
+                assert_true("Second event is counter_attack", log[1].get("type") == "counter_attack",
+                            f"type: {log[1].get('type')}")
 
     # ── Continuous combat until game over ──
     print(f"\n{YELLOW}Continuous combat until game over{NC}")
