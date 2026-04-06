@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -15,12 +14,10 @@ type GameAction string
 
 const (
 	ActionJoinGame   GameAction = "JOIN_GAME"
-	ActionClick      GameAction = "CLICK"
 	ActionSurrender  GameAction = "SURRENDER"
 	ActionDisconnect GameAction = "DISCONNECT"
 	ActionReconnect  GameAction = "RECONNECT"
 	ActionCardPlaced GameAction = "CARD_PLACED"
-	ActionCardAttack GameAction = "CARD_ATTACK"
 )
 
 // GamePhase represents the current phase of the game
@@ -43,59 +40,50 @@ const (
 )
 
 // PlayerState represents the state for a single player
-// Game-specific data should be stored separately by your game logic
 type PlayerState struct {
 	UserID         int64     `json:"user_id"`
 	Username       string    `json:"username"`
 	IsConnected    bool      `json:"is_connected"`
 	LastActionTime time.Time `json:"last_action_time"`
-
-	// GameData is where you'll store your custom game state as JSON
-	// This allows you to define your own game structure
-	GameData json.RawMessage `json:"game_data,omitempty"`
 }
 
 // GameState represents the complete game state
 type GameState struct {
-	SessionID     string       `json:"session_id"`
-	Phase         GamePhase    `json:"phase"`
-	TurnNumber    int          `json:"turn_number"`
-	CurrentPlayer PlayerID     `json:"current_player"`
-	Player1       *PlayerState `json:"player1"`
-	Player2       *PlayerState `json:"player2"`
-	StartedAt     time.Time    `json:"started_at"`
-	LastUpdateAt  time.Time    `json:"last_update_at"`
-	WinnerID      PlayerID     `json:"winner_id,omitempty"`
+	SessionID string    `json:"session_id"`
+	Phase     GamePhase `json:"phase"`
+	Player1   *PlayerState `json:"player1"`
+	Player2   *PlayerState `json:"player2"`
+	StartedAt    time.Time `json:"started_at"`
+	LastUpdateAt time.Time `json:"last_update_at"`
+	WinnerID     PlayerID  `json:"winner_id,omitempty"`
 
-	// Metadata - per-player sequence numbers (kept for backward compat)
+	// Per-player sequence numbers
 	Player1SequenceNumber int64 `json:"player1_sequence_number"`
 	Player2SequenceNumber int64 `json:"player2_sequence_number"`
+
+	// Turn number tracks the round (used by game loop)
+	TurnNumber int `json:"-"`
 
 	// Tick-based sequencing (server-authoritative)
 	TickNumber uint64 `json:"tick_number"`
 
-	mu sync.RWMutex // Protects connection state access from outside game loop
+	mu sync.RWMutex
 }
 
 // PlayerView represents a partial view of the game state for a specific player
-// Your custom game data should go in YourGameData/OpponentGameData
 type PlayerView struct {
 	SessionID      string    `json:"session_id"`
 	Phase          GamePhase `json:"phase"`
-	TurnNumber     int       `json:"turn_number"`
-	CurrentPlayer  PlayerID  `json:"current_player"`
 	SequenceNumber int64     `json:"sequence_number"`
 
 	// Your player info
-	YourUserID   int64           `json:"your_user_id"`
-	YourUsername string          `json:"your_username"`
-	YourGameData json.RawMessage `json:"your_game_data,omitempty"` // Your custom game state
+	YourUserID   int64  `json:"your_user_id"`
+	YourUsername string `json:"your_username"`
 
 	// Opponent's info
-	OpponentUserID    int64           `json:"opponent_user_id"`
-	OpponentUsername  string          `json:"opponent_username"`
-	OpponentConnected bool            `json:"opponent_connected"`
-	OpponentGameData  json.RawMessage `json:"opponent_game_data,omitempty"` // Opponent's custom game state (partial)
+	OpponentUserID    int64  `json:"opponent_user_id"`
+	OpponentUsername  string `json:"opponent_username"`
+	OpponentConnected bool   `json:"opponent_connected"`
 
 	// Server tick number
 	TickNumber uint64 `json:"tick_number"`
@@ -109,23 +97,19 @@ func NewGameState(sessionID string, player1ID, player2ID int64, player1Name, pla
 	now := time.Now()
 
 	return &GameState{
-		SessionID:     sessionID,
-		Phase:         PhaseWaitingForPlayers,
-		TurnNumber:    0,
-		CurrentPlayer: Player1,
+		SessionID: sessionID,
+		Phase:     PhaseWaitingForPlayers,
 		Player1: &PlayerState{
 			UserID:         player1ID,
 			Username:       player1Name,
 			IsConnected:    false,
 			LastActionTime: now,
-			GameData:       nil, // You'll initialize this with your game logic
 		},
 		Player2: &PlayerState{
 			UserID:         player2ID,
 			Username:       player2Name,
 			IsConnected:    false,
 			LastActionTime: now,
-			GameData:       nil, // You'll initialize this with your game logic
 		},
 		StartedAt:             now,
 		LastUpdateAt:          now,
@@ -148,7 +132,6 @@ func (gs *GameState) GetPlayerView(playerID PlayerID) *PlayerView {
 		opponentState = gs.Player1
 	}
 
-	// Get the sequence number for this specific player
 	var playerSeqNum int64
 	if playerID == Player1 {
 		playerSeqNum = gs.Player1SequenceNumber
@@ -159,25 +142,19 @@ func (gs *GameState) GetPlayerView(playerID PlayerID) *PlayerView {
 	view := &PlayerView{
 		SessionID:      gs.SessionID,
 		Phase:          gs.Phase,
-		TurnNumber:     gs.TurnNumber,
-		CurrentPlayer:  gs.CurrentPlayer,
 		SequenceNumber: playerSeqNum,
 
 		YourUserID:   yourState.UserID,
 		YourUsername: yourState.Username,
-		YourGameData: yourState.GameData,
 
 		OpponentUserID:    opponentState.UserID,
 		OpponentUsername:  opponentState.Username,
 		OpponentConnected: opponentState.IsConnected,
-		OpponentGameData:  opponentState.GameData,
 
 		TickNumber: gs.TickNumber,
 	}
 
-	// Compute hash of this view
 	view.StateHash = view.ComputeHash()
-
 	return view
 }
 
@@ -185,31 +162,20 @@ func (gs *GameState) GetPlayerView(playerID PlayerID) *PlayerView {
 func (pv *PlayerView) ComputeHash() uint64 {
 	h := xxhash.New()
 
-	// Hash all fields in deterministic order
 	h.Write([]byte(pv.SessionID))
 	h.Write([]byte(pv.Phase))
-	binary.Write(h, binary.LittleEndian, int32(pv.TurnNumber))
-	binary.Write(h, binary.LittleEndian, int32(pv.CurrentPlayer))
 	binary.Write(h, binary.LittleEndian, pv.SequenceNumber)
 	binary.Write(h, binary.LittleEndian, pv.TickNumber)
 
-	// Your state
 	binary.Write(h, binary.LittleEndian, pv.YourUserID)
 	h.Write([]byte(pv.YourUsername))
-	if pv.YourGameData != nil {
-		h.Write(pv.YourGameData)
-	}
 
-	// Opponent state
 	binary.Write(h, binary.LittleEndian, pv.OpponentUserID)
 	h.Write([]byte(pv.OpponentUsername))
 	if pv.OpponentConnected {
 		h.Write([]byte{1})
 	} else {
 		h.Write([]byte{0})
-	}
-	if pv.OpponentGameData != nil {
-		h.Write(pv.OpponentGameData)
 	}
 
 	return h.Sum64()
@@ -224,7 +190,7 @@ func (pv *PlayerView) VerifyHash(providedHash uint64) error {
 	return nil
 }
 
-// IncrementSequence increments the sequence number for a specific player (call after each action)
+// IncrementSequence increments the sequence number for a specific player
 func (gs *GameState) IncrementSequence(playerID PlayerID) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()

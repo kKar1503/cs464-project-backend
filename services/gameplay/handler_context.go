@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"math/rand"
 
 	"github.com/kKar1503/cs464-backend/services/gameplay/effects"
@@ -13,40 +12,21 @@ type PlayerConnectionContext struct {
 	conn *PlayerConnection
 }
 
-// NewHandlerContext creates a new handler context from a player connection
 func NewHandlerContext(conn *PlayerConnection) *PlayerConnectionContext {
 	return &PlayerConnectionContext{conn: conn}
 }
 
-// Player information
-func (ctx *PlayerConnectionContext) GetPlayerID() int {
-	return int(ctx.conn.PlayerID)
-}
+func (ctx *PlayerConnectionContext) GetPlayerID() int    { return int(ctx.conn.PlayerID) }
+func (ctx *PlayerConnectionContext) GetUserID() int64    { return ctx.conn.UserID }
+func (ctx *PlayerConnectionContext) GetUsername() string  { return ctx.conn.Username }
+func (ctx *PlayerConnectionContext) GetSessionID() string { return ctx.conn.SessionID }
 
-func (ctx *PlayerConnectionContext) GetUserID() int64 {
-	return ctx.conn.UserID
-}
-
-func (ctx *PlayerConnectionContext) GetUsername() string {
-	return ctx.conn.Username
-}
-
-func (ctx *PlayerConnectionContext) GetSessionID() string {
-	return ctx.conn.SessionID
-}
-
-// State access
 func (ctx *PlayerConnectionContext) GetGameState() handlers.GameState {
 	return &GameStateAdapter{state: ctx.conn.Session.State}
 }
 
 func (ctx *PlayerConnectionContext) GetGameplayManager() handlers.GameplayManager {
 	return &GameplayAdapter{gameplay: ctx.conn.Session.GameplayManager}
-}
-
-func (ctx *PlayerConnectionContext) GetPlayerState(playerID int) handlers.PlayerState {
-	ps := ctx.conn.Session.State.GetPlayerState(PlayerID(playerID))
-	return &PlayerStateAdapter{state: ps}
 }
 
 func (ctx *PlayerConnectionContext) GetOpponentID() int {
@@ -56,7 +36,6 @@ func (ctx *PlayerConnectionContext) GetOpponentID() int {
 	return int(Player1)
 }
 
-// State verification
 func (ctx *PlayerConnectionContext) GetCurrentSequence() int64 {
 	return ctx.conn.Session.State.GetPlayerSequence(ctx.conn.PlayerID)
 }
@@ -64,30 +43,15 @@ func (ctx *PlayerConnectionContext) GetCurrentSequence() int64 {
 func (ctx *PlayerConnectionContext) GetPlayerView(playerID int) handlers.PlayerView {
 	view := ctx.conn.Session.State.GetPlayerView(PlayerID(playerID))
 
-	// Parse game data for the view
-	var yourGameData interface{}
-	var opponentGameData interface{}
-
-	if len(view.YourGameData) > 0 {
-		json.Unmarshal(view.YourGameData, &yourGameData)
-	}
-	if len(view.OpponentGameData) > 0 {
-		json.Unmarshal(view.OpponentGameData, &opponentGameData)
-	}
-
 	return handlers.PlayerView{
 		SessionID:         view.SessionID,
 		Phase:             string(view.Phase),
-		TurnNumber:        view.TurnNumber,
-		CurrentPlayer:     int(view.CurrentPlayer),
 		SequenceNumber:    view.SequenceNumber,
 		YourUserID:        view.YourUserID,
 		YourUsername:      view.YourUsername,
-		YourGameData:      yourGameData,
 		OpponentUserID:    view.OpponentUserID,
 		OpponentUsername:  view.OpponentUsername,
 		OpponentConnected: view.OpponentConnected,
-		OpponentGameData:  opponentGameData,
 		StateHash:         view.StateHash,
 	}
 }
@@ -96,7 +60,6 @@ func (ctx *PlayerConnectionContext) IsPlayerTurn() bool {
 	return ctx.conn.Session.State.Phase == PhaseActive
 }
 
-// State modification — no-ops because the game loop is the single writer
 func (ctx *PlayerConnectionContext) LockState()   {}
 func (ctx *PlayerConnectionContext) UnlockState() {}
 
@@ -104,13 +67,10 @@ func (ctx *PlayerConnectionContext) IncrementSequence() {
 	ctx.conn.Session.State.IncrementSequence(ctx.conn.PlayerID)
 }
 
-// Communication
 func (ctx *PlayerConnectionContext) SendStateUpdate(action string, view handlers.PlayerView) {
 	mainView := &PlayerView{
 		SessionID:         view.SessionID,
 		Phase:             GamePhase(view.Phase),
-		TurnNumber:        view.TurnNumber,
-		CurrentPlayer:     PlayerID(view.CurrentPlayer),
 		SequenceNumber:    view.SequenceNumber,
 		YourUserID:        view.YourUserID,
 		YourUsername:      view.YourUsername,
@@ -126,8 +86,6 @@ func (ctx *PlayerConnectionContext) BroadcastToOpponent(action string, view hand
 	mainView := &PlayerView{
 		SessionID:         view.SessionID,
 		Phase:             GamePhase(view.Phase),
-		TurnNumber:        view.TurnNumber,
-		CurrentPlayer:     PlayerID(view.CurrentPlayer),
 		SequenceNumber:    view.SequenceNumber,
 		YourUserID:        view.YourUserID,
 		YourUsername:      view.YourUsername,
@@ -154,18 +112,12 @@ func (ctx *PlayerConnectionContext) SendError(errorMsg string, action string) {
 	ctx.conn.SendError(errorMsg, GameAction(action))
 }
 
-// Session management
 func (ctx *PlayerConnectionContext) UpdateActivity() {
 	ctx.conn.Session.UpdateActivity()
 }
 
-func (ctx *PlayerConnectionContext) StartTurnTimer(playerID int) {
-	// no-op: rounds use RoundTimer, not per-player turn timers
-}
-
-func (ctx *PlayerConnectionContext) StopTurnTimer() {
-	// no-op: rounds use RoundTimer, not per-player turn timers
-}
+func (ctx *PlayerConnectionContext) StartTurnTimer(playerID int) {}
+func (ctx *PlayerConnectionContext) StopTurnTimer()              {}
 
 func (ctx *PlayerConnectionContext) ExecuteServerAction(action string, params interface{}) error {
 	serverCtx := &ServerActionContext{
@@ -284,21 +236,7 @@ type GameStateAdapter struct {
 	state *GameState
 }
 
-func (gsa *GameStateAdapter) GetPhase() string         { return string(gsa.state.Phase) }
-func (gsa *GameStateAdapter) SetPhase(phase string)     { gsa.state.Phase = GamePhase(phase) }
-func (gsa *GameStateAdapter) GetTurnNumber() int         { return gsa.state.TurnNumber }
-func (gsa *GameStateAdapter) SetTurnNumber(turn int)     { gsa.state.TurnNumber = turn }
-func (gsa *GameStateAdapter) GetCurrentPlayer() int      { return int(gsa.state.CurrentPlayer) }
-func (gsa *GameStateAdapter) SetCurrentPlayer(playerID int) { gsa.state.CurrentPlayer = PlayerID(playerID) }
-func (gsa *GameStateAdapter) GetWinnerID() int           { return int(gsa.state.WinnerID) }
-func (gsa *GameStateAdapter) SetWinnerID(playerID int)   { gsa.state.WinnerID = PlayerID(playerID) }
-
-// PlayerStateAdapter adapts PlayerState to handlers.PlayerState interface
-type PlayerStateAdapter struct {
-	state *PlayerState
-}
-
-func (psa *PlayerStateAdapter) GetUserID() int64      { return psa.state.UserID }
-func (psa *PlayerStateAdapter) GetUsername() string    { return psa.state.Username }
-func (psa *PlayerStateAdapter) GetGameData() []byte    { return psa.state.GameData }
-func (psa *PlayerStateAdapter) SetGameData(data []byte) { psa.state.GameData = data }
+func (gsa *GameStateAdapter) GetPhase() string       { return string(gsa.state.Phase) }
+func (gsa *GameStateAdapter) SetPhase(phase string)   { gsa.state.Phase = GamePhase(phase) }
+func (gsa *GameStateAdapter) GetWinnerID() int         { return int(gsa.state.WinnerID) }
+func (gsa *GameStateAdapter) SetWinnerID(playerID int) { gsa.state.WinnerID = PlayerID(playerID) }
