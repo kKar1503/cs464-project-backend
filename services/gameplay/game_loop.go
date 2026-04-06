@@ -305,6 +305,16 @@ type BoardCardView struct {
 	Col                  int    `json:"col"`
 }
 
+// HandCardView is a card in the draw pile or hand.
+type HandCardView struct {
+	CardID   int    `json:"card_id"`
+	CardName string `json:"card_name"`
+	Colour   string `json:"colour"`
+	ManaCost int    `json:"mana_cost"`
+	Attack   int    `json:"attack"`
+	HP       int    `json:"hp"`
+}
+
 // TickUpdateParams is sent with each tick update.
 type TickUpdateParams struct {
 	MilliElixir int              `json:"milli_elixir"`
@@ -315,9 +325,24 @@ type TickUpdateParams struct {
 	YourHP      int              `json:"your_hp"`
 	EnemyHP     int              `json:"enemy_hp"`
 	LeaderAtk   int              `json:"leader_atk"`
+	DrawPile    []HandCardView   `json:"draw_pile"`
+	Hand        []HandCardView   `json:"hand"`
+	DeckSize    int              `json:"deck_size"`
 	Phase       string           `json:"phase"`
 	RoundNumber int              `json:"round_number"`
+	WinnerID    int              `json:"winner_id,omitempty"`
 	AttackLog   []AttackEvent    `json:"attack_log,omitempty"`
+}
+
+func handCardsToView(cards []HandCard) []HandCardView {
+	result := make([]HandCardView, len(cards))
+	for i, c := range cards {
+		result[i] = HandCardView{
+			CardID: c.CardID, CardName: c.CardName, Colour: c.Colour,
+			ManaCost: c.ManaCost, Attack: c.Attack, HP: c.HP,
+		}
+	}
+	return result
 }
 
 func boardToView(board *[2][3]handlers.Card) []BoardCardView {
@@ -363,8 +388,12 @@ func (gl *GameLoop) broadcastTickUpdate() {
 			YourHP:      g.Player1Health,
 			EnemyHP:     g.Player2Health,
 			LeaderAtk:   g.Player1LeaderAtk,
+			DrawPile:    handCardsToView(g.Player1Hand.DrawPile),
+			Hand:        handCardsToView(g.Player1Hand.Hand),
+			DeckSize:    len(g.Player1Hand.Deck),
 			Phase:       string(gl.session.State.Phase),
 			RoundNumber: g.RoundNumber,
+			WinnerID:    int(gl.session.State.WinnerID),
 			AttackLog:   g.LastAttackLog,
 		})
 	}
@@ -381,8 +410,12 @@ func (gl *GameLoop) broadcastTickUpdate() {
 			YourHP:      g.Player2Health,
 			EnemyHP:     g.Player1Health,
 			LeaderAtk:   g.Player2LeaderAtk,
+			DrawPile:    handCardsToView(g.Player2Hand.DrawPile),
+			Hand:        handCardsToView(g.Player2Hand.Hand),
+			DeckSize:    len(g.Player2Hand.Deck),
 			Phase:       string(gl.session.State.Phase),
 			RoundNumber: g.RoundNumber,
+			WinnerID:    int(gl.session.State.WinnerID),
 			AttackLog:   g.LastAttackLog,
 		})
 	}
