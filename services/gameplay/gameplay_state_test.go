@@ -254,8 +254,7 @@ func TestCardChargeAndAutoAttack(t *testing.T) {
 		t.Errorf("card should have 1 tick remaining after 39, got %d", card.ChargeTicksRemaining)
 	}
 
-	// Tick once more — card fully charges, gets queued, and resolves immediately
-	// (cooldown starts at 0, so the attack resolves in the same tick it queues)
+	// Tick once more — attack resolves instantly
 	gm.TickBoard()
 
 	// Should have hit leader (no enemies in column 0)
@@ -311,8 +310,7 @@ func TestAutoAttackHitsEnemyCard(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		gm.TickBoard()
 	}
-	gm.game.AttackCooldown = 0
-	gm.TickBoard()
+
 
 	// Enemy card should take 15 damage (20 - 15 = 5)
 	enemyHP := gm.game.BoardPlayer2[0][1].CurrentHealth
@@ -338,8 +336,7 @@ func TestCardDeathRemoval(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		gm.TickBoard()
 	}
-	gm.game.AttackCooldown = 0
-	gm.TickBoard()
+
 
 	// Enemy card should be dead and removed
 	if gm.game.BoardPlayer2[0][0].CardID != 0 {
@@ -347,47 +344,34 @@ func TestCardDeathRemoval(t *testing.T) {
 	}
 }
 
-func TestAttackQueueFIFO(t *testing.T) {
+func TestMultipleCardsAttackSameTick(t *testing.T) {
 	gm := newTestManager()
 
 	// Place 2 cards that will charge at the same time
 	placeTestCard(gm, true, 0, 0, 1, 10, 50)
 	placeTestCard(gm, true, 0, 1, 2, 20, 50)
 
-	// Charge both fully — on tick 40:
-	// Both get queued, first one resolves immediately (cooldown was 0)
-	// Second stays in queue with cooldown set
+	// Charge both fully — both resolve instantly on tick 40
 	for i := 0; i < 40; i++ {
 		gm.TickBoard()
-	}
-
-	// First attack should have resolved (hit leader col 0), second still queued
-	if len(gm.game.AttackQueue) != 1 {
-		t.Fatalf("expected 1 attack remaining in queue, got %d", len(gm.game.AttackQueue))
-	}
-
-	// The remaining attack should be col 1
-	remaining := gm.game.AttackQueue[0]
-	if remaining.Col != 1 {
-		t.Errorf("remaining attack should be col 1, got col %d", remaining.Col)
-	}
-
-	// Cooldown should be set
-	if gm.game.AttackCooldown != AttackCooldownTicks {
-		t.Errorf("cooldown should be %d, got %d", AttackCooldownTicks, gm.game.AttackCooldown)
-	}
-
-	// Wait for cooldown, then second attack resolves
-	for i := 0; i < AttackCooldownTicks; i++ {
-		gm.TickBoard()
-	}
-	if len(gm.game.AttackQueue) != 0 {
-		t.Errorf("queue should be empty after cooldown, got %d", len(gm.game.AttackQueue))
 	}
 
 	// Both attacks hit leader (no enemies), total damage = 10 + 20 = 30
 	if gm.game.Player2Health != 220 { // 250 - 30
 		t.Errorf("leader HP after both attacks: got %d, want 220", gm.game.Player2Health)
+	}
+
+	// Both should have attack events logged
+	if len(gm.game.LastAttackLog) != 2 {
+		t.Errorf("expected 2 attack events, got %d", len(gm.game.LastAttackLog))
+	}
+
+	// Both cards should have restarted charging
+	if !gm.game.BoardPlayer1[0][0].IsCharging {
+		t.Error("card at [0][0] should be charging again")
+	}
+	if !gm.game.BoardPlayer1[0][1].IsCharging {
+		t.Error("card at [0][1] should be charging again")
 	}
 }
 
@@ -404,8 +388,7 @@ func TestWinConditionOnLeaderDeath(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		gm.TickBoard()
 	}
-	gm.game.AttackCooldown = 0
-	gm.TickBoard()
+
 
 	gameOver, winner := gm.CheckWinCondition()
 	if !gameOver {

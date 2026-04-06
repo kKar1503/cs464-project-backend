@@ -34,15 +34,8 @@ const (
 	MaxElixir            = 8
 	MaxMilliElixir       = MaxElixir * MilliElixirPerElixir
 	StartingElixir       = 3
-	LeaderAttack         = 10 // leader counterattack damage
-	AttackCooldownTicks  = 12 // 3 seconds between attack resolutions (animation time)
+	LeaderAttack = 10 // leader counterattack damage
 )
-
-// PendingAttack represents a card ready to attack, waiting in the attack queue.
-type PendingAttack struct {
-	IsPlayer1 bool
-	Row, Col  int
-}
 
 // AttackEvent records a single attack resolution for broadcast to clients.
 type AttackEvent struct {
@@ -72,10 +65,7 @@ type GameplayState struct {
 	Player1Hand        *PlayerHand
 	Player2Hand        *PlayerHand
 
-	// Attack queue
-	AttackQueue         []PendingAttack
-	AttackCooldown      int // ticks remaining before next attack resolves
-	LastAttackLog       []AttackEvent // attacks resolved in the most recent tick
+	LastAttackLog []AttackEvent // attacks resolved in the most recent tick
 }
 
 // GameplayManager manages gameplay state. All methods are called from the
@@ -114,50 +104,38 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 // Board / Combat
 // ──────────────────────────────────────────────
 
-// TickBoard processes one tick of board state: charge cards, queue attacks, resolve one attack.
+// TickBoard processes one tick of board state: charge cards, resolve attacks instantly when ready.
 // Returns true if any state changed.
 func (gh *GameplayManager) TickBoard() bool {
 	changed := false
 	g := gh.game
+	g.LastAttackLog = nil
 
-	// 1. Tick charge timers for all cards on both boards
+	// Tick charge timers and resolve attacks instantly when charged
 	for r := 0; r < 2; r++ {
 		for c := 0; c < 3; c++ {
 			if g.BoardPlayer1[r][c].CardID != 0 && g.BoardPlayer1[r][c].IsCharging {
 				g.BoardPlayer1[r][c].ChargeTicksRemaining--
-				if g.BoardPlayer1[r][c].ChargeTicksRemaining <= 0 {
-					g.BoardPlayer1[r][c].IsCharging = false
-					g.AttackQueue = append(g.AttackQueue, PendingAttack{IsPlayer1: true, Row: r, Col: c})
-				}
 				changed = true
+				if g.BoardPlayer1[r][c].ChargeTicksRemaining <= 0 {
+					if event := gh.resolveAttack(true, r, c); event != nil {
+						g.LastAttackLog = append(g.LastAttackLog, *event)
+					}
+				}
 			}
 			if g.BoardPlayer2[r][c].CardID != 0 && g.BoardPlayer2[r][c].IsCharging {
 				g.BoardPlayer2[r][c].ChargeTicksRemaining--
-				if g.BoardPlayer2[r][c].ChargeTicksRemaining <= 0 {
-					g.BoardPlayer2[r][c].IsCharging = false
-					g.AttackQueue = append(g.AttackQueue, PendingAttack{IsPlayer1: false, Row: r, Col: c})
-				}
 				changed = true
+				if g.BoardPlayer2[r][c].ChargeTicksRemaining <= 0 {
+					if event := gh.resolveAttack(false, r, c); event != nil {
+						g.LastAttackLog = append(g.LastAttackLog, *event)
+					}
+				}
 			}
 		}
 	}
 
-	// 2. Resolve attacks from queue (one per cooldown period)
-	g.LastAttackLog = nil
-	if g.AttackCooldown > 0 {
-		g.AttackCooldown--
-	}
-	if g.AttackCooldown <= 0 && len(g.AttackQueue) > 0 {
-		attack := g.AttackQueue[0]
-		g.AttackQueue = g.AttackQueue[1:]
-		if event := gh.resolveAttack(attack); event != nil {
-			g.LastAttackLog = append(g.LastAttackLog, *event)
-			changed = true
-		}
-		g.AttackCooldown = AttackCooldownTicks
-	}
-
-	// 3. Clean up dead cards
+	// Clean up dead cards
 	for r := 0; r < 2; r++ {
 		for c := 0; c < 3; c++ {
 			if g.BoardPlayer1[r][c].CardID != 0 && g.BoardPlayer1[r][c].CurrentHealth <= 0 {
@@ -174,15 +152,15 @@ func (gh *GameplayManager) TickBoard() bool {
 	return changed
 }
 
-// resolveAttack resolves a single attack from the queue.
-func (gh *GameplayManager) resolveAttack(attack PendingAttack) *AttackEvent {
+// resolveAttack resolves a single attack instantly when a card's charge completes.
+func (gh *GameplayManager) resolveAttack(isPlayer1 bool, row, col int) *AttackEvent {
 	g := gh.game
 
 	var attackerBoard, defenderBoard *[2][3]handlers.Card
 	var defenderHealth *int
 	var defenderLeaderAtk int
 
-	if attack.IsPlayer1 {
+	if isPlayer1 {
 		attackerBoard = g.BoardPlayer1
 		defenderBoard = g.BoardPlayer2
 		defenderHealth = &g.Player2Health
@@ -194,46 +172,41 @@ func (gh *GameplayManager) resolveAttack(attack PendingAttack) *AttackEvent {
 		defenderLeaderAtk = g.Player1LeaderAtk
 	}
 
-	attacker := &attackerBoard[attack.Row][attack.Col]
+	attacker := &attackerBoard[row][col]
 	if attacker.CardID == 0 {
-		return nil // attacker died before resolving
+		return nil
 	}
 
-	col := attack.Col
 	damage := attacker.CardAttack
 
 	event := &AttackEvent{
 		AttackerCardID: attacker.CardID,
-		AttackerRow:    attack.Row,
-		AttackerCol:    attack.Col,
+		AttackerRow:    row,
+		AttackerCol:    col,
 		Damage:         damage,
 	}
 
 	// Find target: front row first, then back row, then leader
 	if defenderBoard[0][col].CardID != 0 {
-		// Hit front row card
 		target := &defenderBoard[0][col]
 		target.CurrentHealth -= damage
 		event.TargetCardID = target.CardID
 		event.TargetRow = 0
 		event.TargetCol = col
 	} else if defenderBoard[1][col].CardID != 0 {
-		// Hit back row card
 		target := &defenderBoard[1][col]
 		target.CurrentHealth -= damage
 		event.TargetCardID = target.CardID
 		event.TargetRow = 1
 		event.TargetCol = col
 	} else {
-		// Hit leader
 		*defenderHealth -= damage
 		event.TargetIsLeader = true
-		// Leader counterattacks
 		attacker.CurrentHealth -= defenderLeaderAtk
 		event.CounterDamage = defenderLeaderAtk
 	}
 
-	// Reset attacker's charge timer
+	// Reset charge timer immediately — next attack cycle starts now
 	attacker.ChargeTicksRemaining = handlers.ChargeTicksTotal
 	attacker.IsCharging = true
 
