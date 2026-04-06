@@ -341,7 +341,6 @@ type TickUpdateParams struct {
 	DrawPile    []HandCardView   `json:"draw_pile"`
 	Hand        []HandCardView   `json:"hand"`
 	DeckSize    int              `json:"deck_size"`
-	Phase       string           `json:"phase"`
 	RoundNumber int              `json:"round_number"`
 	WinnerID    int              `json:"winner_id,omitempty"`
 	CombatLog   []CombatEvent    `json:"combat_log,omitempty"`
@@ -405,7 +404,6 @@ func (gl *GameLoop) broadcastTickUpdate() {
 			DrawPile:    handCardsToView(g.Player1Hand.DrawPile),
 			Hand:        handCardsToView(g.Player1Hand.Hand),
 			DeckSize:    len(g.Player1Hand.Deck),
-			Phase:       string(gl.session.State.Phase),
 			RoundNumber: g.RoundNumber,
 			WinnerID:    int(gl.session.State.WinnerID),
 			CombatLog:   g.CombatLog,
@@ -427,7 +425,6 @@ func (gl *GameLoop) broadcastTickUpdate() {
 			DrawPile:    handCardsToView(g.Player2Hand.DrawPile),
 			Hand:        handCardsToView(g.Player2Hand.Hand),
 			DeckSize:    len(g.Player2Hand.Deck),
-			Phase:       string(gl.session.State.Phase),
 			RoundNumber: g.RoundNumber,
 			WinnerID:    int(gl.session.State.WinnerID),
 			CombatLog:   g.CombatLog,
