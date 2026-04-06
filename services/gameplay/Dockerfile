@@ -3,8 +3,9 @@ FROM golang:1.25.7-alpine AS builder
 
 WORKDIR /app
 
-# Copy shared module
+# Copy shared module and db module
 COPY shared ./shared
+COPY db ./db
 
 # Copy service module files first (for dependency caching)
 COPY services/gameplay/go.mod services/gameplay/go.sum* ./services/gameplay/
