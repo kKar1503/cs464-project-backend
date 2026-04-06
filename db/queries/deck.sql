@@ -20,23 +20,23 @@ DELETE FROM deck_cards WHERE deck_id = ?;
 DELETE FROM decks WHERE deck_id = ? AND player_id = ?;
 
 -- name: GetAllCards :many
-SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url
+SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards ORDER BY card_id ASC;
 
 -- name: GetAllCardsByRarity :many
-SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url
+SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards WHERE rarity = ? ORDER BY card_id ASC;
 
 -- name: GetAllCardsByAffiliation :many
-SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url
+SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards WHERE affiliation = ? ORDER BY card_id ASC;
 
 -- name: GetAllCardsByRarityAndAffiliation :many
-SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url
+SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards WHERE rarity = ? AND affiliation = ? ORDER BY card_id ASC;
 
 -- name: GetPlayerCards :many
-SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
+SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
        c.description, c.icon_url, pc.level, pc.quantity
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
@@ -47,7 +47,7 @@ ORDER BY c.rarity DESC, c.card_id ASC;
 SELECT deck_id, name, created_at FROM decks WHERE player_id = ? ORDER BY deck_id ASC;
 
 -- name: GetPlayerCardsNotInDeck :many
-SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
+SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
        c.description, c.icon_url, pc.level,
        pc.quantity - COALESCE(in_deck.cnt, 0) AS quantity
 FROM player_cards pc
@@ -103,3 +103,22 @@ UPDATE users SET active_deck_id = ? WHERE id = ?;
 
 -- name: GetActiveDeck :one
 SELECT active_deck_id FROM users WHERE id = ?;
+
+-- name: GetAbilitiesForDeck :many
+SELECT ca.card_id, ca.trigger_type, ca.effect_type, ca.params
+FROM card_abilities ca
+WHERE ca.card_id IN (
+    SELECT dc.card_id FROM deck_cards dc WHERE dc.deck_id = ?
+)
+ORDER BY ca.card_id, ca.ability_id;
+
+-- name: GetAllCardDefinitions :many
+SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
+       COALESCE(cs.power, 0) AS attack, COALESCE(cs.hp, 0) AS hp
+FROM cards c
+LEFT JOIN card_stats cs ON cs.card_id = c.card_id AND cs.level = 1
+ORDER BY c.card_id;
+
+-- name: GetAllCardAbilities :many
+SELECT card_id, trigger_type, effect_type, params
+FROM card_abilities ORDER BY card_id, ability_id;

@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 )
 
@@ -59,6 +60,50 @@ func (q *Queries) DeleteDeckCards(ctx context.Context, deckID int32) error {
 	return err
 }
 
+const getAbilitiesForDeck = `-- name: GetAbilitiesForDeck :many
+SELECT ca.card_id, ca.trigger_type, ca.effect_type, ca.params
+FROM card_abilities ca
+WHERE ca.card_id IN (
+    SELECT dc.card_id FROM deck_cards dc WHERE dc.deck_id = ?
+)
+ORDER BY ca.card_id, ca.ability_id
+`
+
+type GetAbilitiesForDeckRow struct {
+	CardID      int32           `json:"card_id"`
+	TriggerType string          `json:"trigger_type"`
+	EffectType  string          `json:"effect_type"`
+	Params      json.RawMessage `json:"params"`
+}
+
+func (q *Queries) GetAbilitiesForDeck(ctx context.Context, deckID int32) ([]GetAbilitiesForDeckRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAbilitiesForDeck, deckID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAbilitiesForDeckRow{}
+	for rows.Next() {
+		var i GetAbilitiesForDeckRow
+		if err := rows.Scan(
+			&i.CardID,
+			&i.TriggerType,
+			&i.EffectType,
+			&i.Params,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getActiveDeck = `-- name: GetActiveDeck :one
 SELECT active_deck_id FROM users WHERE id = ?
 `
@@ -70,8 +115,97 @@ func (q *Queries) GetActiveDeck(ctx context.Context, id int64) (*int32, error) {
 	return active_deck_id, err
 }
 
+const getAllCardAbilities = `-- name: GetAllCardAbilities :many
+SELECT card_id, trigger_type, effect_type, params
+FROM card_abilities ORDER BY card_id, ability_id
+`
+
+type GetAllCardAbilitiesRow struct {
+	CardID      int32           `json:"card_id"`
+	TriggerType string          `json:"trigger_type"`
+	EffectType  string          `json:"effect_type"`
+	Params      json.RawMessage `json:"params"`
+}
+
+func (q *Queries) GetAllCardAbilities(ctx context.Context) ([]GetAllCardAbilitiesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAllCardAbilities)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAllCardAbilitiesRow{}
+	for rows.Next() {
+		var i GetAllCardAbilitiesRow
+		if err := rows.Scan(
+			&i.CardID,
+			&i.TriggerType,
+			&i.EffectType,
+			&i.Params,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllCardDefinitions = `-- name: GetAllCardDefinitions :many
+SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
+       COALESCE(cs.power, 0) AS attack, COALESCE(cs.hp, 0) AS hp
+FROM cards c
+LEFT JOIN card_stats cs ON cs.card_id = c.card_id AND cs.level = 1
+ORDER BY c.card_id
+`
+
+type GetAllCardDefinitionsRow struct {
+	CardID      int32  `json:"card_id"`
+	CardName    string `json:"card_name"`
+	Affiliation int32  `json:"affiliation"`
+	Rarity      string `json:"rarity"`
+	ManaCost    int32  `json:"mana_cost"`
+	Attack      int32  `json:"attack"`
+	Hp          int32  `json:"hp"`
+}
+
+func (q *Queries) GetAllCardDefinitions(ctx context.Context) ([]GetAllCardDefinitionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAllCardDefinitions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAllCardDefinitionsRow{}
+	for rows.Next() {
+		var i GetAllCardDefinitionsRow
+		if err := rows.Scan(
+			&i.CardID,
+			&i.CardName,
+			&i.Affiliation,
+			&i.Rarity,
+			&i.ManaCost,
+			&i.Attack,
+			&i.Hp,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAllCards = `-- name: GetAllCards :many
-SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url
+SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards ORDER BY card_id ASC
 `
 
@@ -90,7 +224,6 @@ func (q *Queries) GetAllCards(ctx context.Context) ([]Card, error) {
 			&i.Affiliation,
 			&i.Rarity,
 			&i.ManaCost,
-			&i.MaxLevel,
 			&i.Description,
 			&i.IconUrl,
 		); err != nil {
@@ -108,7 +241,7 @@ func (q *Queries) GetAllCards(ctx context.Context) ([]Card, error) {
 }
 
 const getAllCardsByAffiliation = `-- name: GetAllCardsByAffiliation :many
-SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url
+SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards WHERE affiliation = ? ORDER BY card_id ASC
 `
 
@@ -127,7 +260,6 @@ func (q *Queries) GetAllCardsByAffiliation(ctx context.Context, affiliation int3
 			&i.Affiliation,
 			&i.Rarity,
 			&i.ManaCost,
-			&i.MaxLevel,
 			&i.Description,
 			&i.IconUrl,
 		); err != nil {
@@ -145,7 +277,7 @@ func (q *Queries) GetAllCardsByAffiliation(ctx context.Context, affiliation int3
 }
 
 const getAllCardsByRarity = `-- name: GetAllCardsByRarity :many
-SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url
+SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards WHERE rarity = ? ORDER BY card_id ASC
 `
 
@@ -164,7 +296,6 @@ func (q *Queries) GetAllCardsByRarity(ctx context.Context, rarity string) ([]Car
 			&i.Affiliation,
 			&i.Rarity,
 			&i.ManaCost,
-			&i.MaxLevel,
 			&i.Description,
 			&i.IconUrl,
 		); err != nil {
@@ -182,7 +313,7 @@ func (q *Queries) GetAllCardsByRarity(ctx context.Context, rarity string) ([]Car
 }
 
 const getAllCardsByRarityAndAffiliation = `-- name: GetAllCardsByRarityAndAffiliation :many
-SELECT card_id, card_name, affiliation, rarity, mana_cost, max_level, description, icon_url
+SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards WHERE rarity = ? AND affiliation = ? ORDER BY card_id ASC
 `
 
@@ -206,7 +337,6 @@ func (q *Queries) GetAllCardsByRarityAndAffiliation(ctx context.Context, arg Get
 			&i.Affiliation,
 			&i.Rarity,
 			&i.ManaCost,
-			&i.MaxLevel,
 			&i.Description,
 			&i.IconUrl,
 		); err != nil {
@@ -384,7 +514,7 @@ func (q *Queries) GetPlayerCardOwnership(ctx context.Context, playerID int64) ([
 }
 
 const getPlayerCards = `-- name: GetPlayerCards :many
-SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
+SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
        c.description, c.icon_url, pc.level, pc.quantity
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
@@ -398,7 +528,6 @@ type GetPlayerCardsRow struct {
 	Affiliation int32  `json:"affiliation"`
 	Rarity      string `json:"rarity"`
 	ManaCost    int32  `json:"mana_cost"`
-	MaxLevel    int32  `json:"max_level"`
 	Description string `json:"description"`
 	IconUrl     string `json:"icon_url"`
 	Level       int32  `json:"level"`
@@ -420,7 +549,6 @@ func (q *Queries) GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlay
 			&i.Affiliation,
 			&i.Rarity,
 			&i.ManaCost,
-			&i.MaxLevel,
 			&i.Description,
 			&i.IconUrl,
 			&i.Level,
@@ -440,7 +568,7 @@ func (q *Queries) GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlay
 }
 
 const getPlayerCardsNotInDeck = `-- name: GetPlayerCardsNotInDeck :many
-SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost, c.max_level,
+SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
        c.description, c.icon_url, pc.level,
        pc.quantity - COALESCE(in_deck.cnt, 0) AS quantity
 FROM player_cards pc
@@ -467,7 +595,6 @@ type GetPlayerCardsNotInDeckRow struct {
 	Affiliation int32  `json:"affiliation"`
 	Rarity      string `json:"rarity"`
 	ManaCost    int32  `json:"mana_cost"`
-	MaxLevel    int32  `json:"max_level"`
 	Description string `json:"description"`
 	IconUrl     string `json:"icon_url"`
 	Level       int32  `json:"level"`
@@ -489,7 +616,6 @@ func (q *Queries) GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCard
 			&i.Affiliation,
 			&i.Rarity,
 			&i.ManaCost,
-			&i.MaxLevel,
 			&i.Description,
 			&i.IconUrl,
 			&i.Level,

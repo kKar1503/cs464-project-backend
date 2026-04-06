@@ -25,9 +25,12 @@ type Querier interface {
 	DeleteFromQueue(ctx context.Context, userID int64) (sql.Result, error)
 	DeleteFromQueueByUsers(ctx context.Context, arg DeleteFromQueueByUsersParams) error
 	DeleteUser(ctx context.Context, id int64) error
+	GetAbilitiesForDeck(ctx context.Context, deckID int32) ([]GetAbilitiesForDeckRow, error)
 	GetActiveDeck(ctx context.Context, id int64) (*int32, error)
 	GetActiveQueue(ctx context.Context) ([]GetActiveQueueRow, error)
 	GetActiveTokensByUser(ctx context.Context, userID int64) ([]string, error)
+	GetAllCardAbilities(ctx context.Context) ([]GetAllCardAbilitiesRow, error)
+	GetAllCardDefinitions(ctx context.Context) ([]GetAllCardDefinitionsRow, error)
 	GetAllCards(ctx context.Context) ([]Card, error)
 	GetAllCardsByAffiliation(ctx context.Context, affiliation int32) ([]Card, error)
 	GetAllCardsByRarity(ctx context.Context, rarity string) ([]Card, error)

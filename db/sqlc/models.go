@@ -77,17 +77,16 @@ type Card struct {
 	Affiliation int32  `json:"affiliation"`
 	Rarity      string `json:"rarity"`
 	ManaCost    int32  `json:"mana_cost"`
-	MaxLevel    int32  `json:"max_level"`
 	Description string `json:"description"`
 	IconUrl     string `json:"icon_url"`
 }
 
 type CardAbility struct {
-	AbilitiesID int32           `json:"abilities_id"`
+	AbilityID   int32           `json:"ability_id"`
 	CardID      int32           `json:"card_id"`
 	TriggerType string          `json:"trigger_type"`
-	Effect      string          `json:"effect"`
-	Abilties    json.RawMessage `json:"abilties"`
+	EffectType  string          `json:"effect_type"`
+	Params      json.RawMessage `json:"params"`
 }
 
 type CardPack struct {
