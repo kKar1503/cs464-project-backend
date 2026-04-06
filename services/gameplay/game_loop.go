@@ -87,12 +87,19 @@ func (gl *GameLoop) processTick() {
 	// Drain all queued events
 	gl.drainEvents()
 
-	// Tick elixir every tick (fractional accumulation via milliElixir)
-	if gl.session.GameplayManager.TickElixir() {
-		gl.dirty = true
+	phase := gl.session.State.Phase
+	if phase == PhaseActive {
+		// Tick elixir (only during active phase)
+		if gl.session.GameplayManager.TickElixir() {
+			gl.dirty = true
+		}
+		// Tick card charges and resolve attacks
+		if gl.session.GameplayManager.TickBoard() {
+			gl.dirty = true
+		}
 	}
 
-	// Check win conditions
+	// Check win conditions (always)
 	if gameOver, winnerID := gl.session.GameplayManager.CheckWinCondition(); gameOver {
 		gl.handleGameOver(winnerID)
 	}
@@ -251,34 +258,99 @@ func (gl *GameLoop) handleGameOver(winnerID int) {
 	log.Printf("Game over in session %s, winner: Player %d", gl.session.State.SessionID, winner)
 }
 
-// ElixirTickParams is sent with each tick update so clients can display smooth elixir bars.
-type ElixirTickParams struct {
-	MilliElixir int `json:"milli_elixir"` // raw milliElixir (1000 = 1 elixir)
-	Elixir      int `json:"elixir"`       // whole elixir (for spending)
-	ElixirCap   int `json:"elixir_cap"`   // current round's cap (3 at round 1, +1 per round, max 8)
+// BoardCardView is the client-facing representation of a card on the board.
+type BoardCardView struct {
+	CardID               int    `json:"card_id"`
+	CardName             string `json:"card_name"`
+	Colour               string `json:"colour"`
+	CurrentHealth        int    `json:"current_health"`
+	MaxHealth            int    `json:"max_health"`
+	CardAttack           int    `json:"card_attack"`
+	ChargeTicksRemaining int    `json:"charge_ticks_remaining"`
+	ChargeTicksTotal     int    `json:"charge_ticks_total"`
+	Row                  int    `json:"row"`
+	Col                  int    `json:"col"`
+}
+
+// TickUpdateParams is sent with each tick update.
+type TickUpdateParams struct {
+	MilliElixir int              `json:"milli_elixir"`
+	Elixir      int              `json:"elixir"`
+	ElixirCap   int              `json:"elixir_cap"`
+	YourBoard   []BoardCardView  `json:"your_board"`
+	EnemyBoard  []BoardCardView  `json:"enemy_board"`
+	YourHP      int              `json:"your_hp"`
+	EnemyHP     int              `json:"enemy_hp"`
+	LeaderAtk   int              `json:"leader_atk"`
+	Phase       string           `json:"phase"`
+	RoundNumber int              `json:"round_number"`
+	AttackLog   []AttackEvent    `json:"attack_log,omitempty"`
+}
+
+func boardToView(board *[2][3]handlers.Card) []BoardCardView {
+	var cards []BoardCardView
+	for r := 0; r < 2; r++ {
+		for c := 0; c < 3; c++ {
+			if board[r][c].CardID != 0 {
+				cards = append(cards, BoardCardView{
+					CardID:               board[r][c].CardID,
+					CardName:             board[r][c].CardName,
+					Colour:               board[r][c].Colour,
+					CurrentHealth:        board[r][c].CurrentHealth,
+					MaxHealth:            board[r][c].MaxHealth,
+					CardAttack:           board[r][c].CardAttack,
+					ChargeTicksRemaining: board[r][c].ChargeTicksRemaining,
+					ChargeTicksTotal:     handlers.ChargeTicksTotal,
+					Row:                  r,
+					Col:                  c,
+				})
+			}
+		}
+	}
+	if cards == nil {
+		cards = []BoardCardView{}
+	}
+	return cards
 }
 
 // broadcastTickUpdate sends the current state to all connected players
 func (gl *GameLoop) broadcastTickUpdate() {
 	gm := gl.session.GameplayManager
+	g := gm.game
 
 	p1Conn := gl.session.GetPlayerConnection(Player1)
 	if p1Conn != nil {
 		p1View := gl.session.State.GetPlayerView(Player1)
-		p1Conn.SendStateUpdateWithParams("TICK_UPDATE", p1View, ElixirTickParams{
+		p1Conn.SendStateUpdateWithParams("TICK_UPDATE", p1View, TickUpdateParams{
 			MilliElixir: gm.GetMilliElixir(gm.player1ID),
 			Elixir:      gm.GetElixirDisplay(gm.player1ID),
-			ElixirCap:   gm.game.ElixirCap,
+			ElixirCap:   g.ElixirCap,
+			YourBoard:   boardToView(g.BoardPlayer1),
+			EnemyBoard:  boardToView(g.BoardPlayer2),
+			YourHP:      g.Player1Health,
+			EnemyHP:     g.Player2Health,
+			LeaderAtk:   g.Player1LeaderAtk,
+			Phase:       string(gl.session.State.Phase),
+			RoundNumber: g.RoundNumber,
+			AttackLog:   g.LastAttackLog,
 		})
 	}
 
 	p2Conn := gl.session.GetPlayerConnection(Player2)
 	if p2Conn != nil {
 		p2View := gl.session.State.GetPlayerView(Player2)
-		p2Conn.SendStateUpdateWithParams("TICK_UPDATE", p2View, ElixirTickParams{
+		p2Conn.SendStateUpdateWithParams("TICK_UPDATE", p2View, TickUpdateParams{
 			MilliElixir: gm.GetMilliElixir(gm.player2ID),
 			Elixir:      gm.GetElixirDisplay(gm.player2ID),
-			ElixirCap:   gm.game.ElixirCap,
+			ElixirCap:   g.ElixirCap,
+			YourBoard:   boardToView(g.BoardPlayer2),
+			EnemyBoard:  boardToView(g.BoardPlayer1),
+			YourHP:      g.Player2Health,
+			EnemyHP:     g.Player1Health,
+			LeaderAtk:   g.Player2LeaderAtk,
+			Phase:       string(gl.session.State.Phase),
+			RoundNumber: g.RoundNumber,
+			AttackLog:   g.LastAttackLog,
 		})
 	}
 }
