@@ -17,7 +17,8 @@ const (
 	ActionSurrender  GameAction = "SURRENDER"
 	ActionDisconnect GameAction = "DISCONNECT"
 	ActionReconnect  GameAction = "RECONNECT"
-	ActionCardPlaced GameAction = "CARD_PLACED"
+	ActionCardPlaced    GameAction = "CARD_PLACED"
+	ActionDebugPlaceUnit GameAction = "DEBUG_PLACE_UNIT"
 )
 
 // GamePhase represents the current phase of the game

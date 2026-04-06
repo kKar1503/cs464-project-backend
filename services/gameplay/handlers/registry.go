@@ -24,4 +24,7 @@ func init() {
 	RegisterActionHandler("JOIN_GAME", HandleJoinGame)
 	RegisterActionHandler("SURRENDER", HandleSurrender)
 	RegisterActionHandler("RECONNECT", HandleReconnect)
+
+	// Debug actions
+	RegisterActionHandler("DEBUG_PLACE_UNIT", HandleDebugPlaceUnit)
 }
