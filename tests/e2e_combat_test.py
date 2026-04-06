@@ -32,6 +32,7 @@ NC = "\033[0m"
 passed = 0
 failed = 0
 total = 0
+verbose = False
 lock = threading.Lock()
 
 
@@ -140,6 +141,8 @@ class GamePlayer:
                 if not raw:
                     continue
                 msg = json.loads(raw)
+                if verbose:
+                    print(f"    {CYAN}[{self.name} recv] {json.dumps(msg, separators=(',', ':'))[:300]}{NC}")
                 sv = msg.get("state_view")
                 if isinstance(sv, dict):
                     tn = sv.get("tick_number", 0)
@@ -397,24 +400,31 @@ def run_combat_test(attacker_label, attacker_token, defender_token):
 def main():
     global passed, failed
 
+    import argparse
+    parser = argparse.ArgumentParser(description="E2E Combat Test")
+    parser.add_argument("--attacker", choices=["p1", "p2"], default="p1",
+                        help="Which player attacks: p1 (default) or p2")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Print raw WebSocket messages")
+    args = parser.parse_args()
+
+    global verbose
+    verbose = args.verbose
+
     ts = int(time.time())
     password = "testpassword123"
 
-    # Register 4 players (2 per test)
     print(f"{YELLOW}Registering players...{NC}")
-    p1a_token, _ = register_and_login(f"cbt_p1a_{ts}", password)
-    p2a_token, _ = register_and_login(f"cbt_p2a_{ts}", password)
-    p1b_token, _ = register_and_login(f"cbt_p1b_{ts}", password)
-    p2b_token, _ = register_and_login(f"cbt_p2b_{ts}", password)
+    p1_token, _ = register_and_login(f"cbt_p1_{ts}", password)
+    p2_token, _ = register_and_login(f"cbt_p2_{ts}", password)
 
-    # Test 1: P1 attacks, P2 defends
-    run_combat_test("P1 attacks P2", p1a_token, p2a_token)
-
-    # Test 2: P2 attacks, P1 defends (roles swapped)
-    run_combat_test("P2 attacks P1", p2b_token, p1b_token)
+    if args.attacker == "p1":
+        run_combat_test("P1 attacks P2", p1_token, p2_token)
+    else:
+        run_combat_test("P2 attacks P1", p2_token, p1_token)
 
     print(f"\n{'═' * 60}")
-    print(f"Final Results: {GREEN}{passed} passed{NC}, {RED}{failed} failed{NC}, {total} total")
+    print(f"Results: {GREEN}{passed} passed{NC}, {RED}{failed} failed{NC}, {total} total")
     print(f"{'═' * 60}")
 
     sys.exit(1 if failed > 0 else 0)
