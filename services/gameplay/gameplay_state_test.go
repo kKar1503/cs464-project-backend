@@ -27,17 +27,14 @@ func TestInitialElixir(t *testing.T) {
 func TestElixirCapAtRound1(t *testing.T) {
 	gm := newTestManager()
 
-	if gm.game.ElixirCap != 3 {
-		t.Fatalf("round 1 elixir cap: got %d, want 3", gm.game.ElixirCap)
+	if gm.game.ElixirCap != StartingElixirCap {
+		t.Fatalf("round 1 elixir cap: got %d, want %d", gm.game.ElixirCap, StartingElixirCap)
 	}
 
-	// Already at cap (3), ticking should not increase
+	// Starting elixir (3) is below cap (5), ticking should increase
 	changed := gm.TickElixir()
-	if changed {
-		t.Error("elixir should not change when already at cap")
-	}
-	if gm.GetElixirDisplay(1) != 3 {
-		t.Errorf("player1 elixir after tick at cap: got %d, want 3", gm.GetElixirDisplay(1))
+	if !changed {
+		t.Error("elixir should change when below cap")
 	}
 }
 
@@ -59,7 +56,7 @@ func TestElixirRechargeAfterSpend(t *testing.T) {
 		t.Errorf("after 20 ticks (1 elixir): got %d, want 2", gm.GetElixirDisplay(1))
 	}
 
-	// Tick 20 more = back to cap of 3
+	// Tick 20 more = 3 elixir
 	for i := 0; i < 20; i++ {
 		gm.TickElixir()
 	}
@@ -67,19 +64,19 @@ func TestElixirRechargeAfterSpend(t *testing.T) {
 		t.Errorf("after 40 ticks (2 elixir): got %d, want 3", gm.GetElixirDisplay(1))
 	}
 
-	// Tick more — should stay at 3 (round 1 cap)
-	for i := 0; i < 20; i++ {
+	// Tick 40 more = should reach cap of 5
+	for i := 0; i < 40; i++ {
 		gm.TickElixir()
 	}
-	if gm.GetElixirDisplay(1) != 3 {
-		t.Errorf("should stay at cap 3: got %d", gm.GetElixirDisplay(1))
+	if gm.GetElixirDisplay(1) != 5 {
+		t.Errorf("should reach cap 5: got %d", gm.GetElixirDisplay(1))
 	}
 }
 
 func TestElixirCapIncreasesPerRound(t *testing.T) {
 	gm := newTestManager()
 
-	expectedCaps := []int{3, 4, 5, 6, 7, 8, 8, 8}
+	expectedCaps := []int{5, 6, 7, 8, 8, 8}
 	for i, expected := range expectedCaps {
 		if gm.game.ElixirCap != expected {
 			t.Errorf("round %d: elixir cap got %d, want %d", i+1, gm.game.ElixirCap, expected)
@@ -98,7 +95,7 @@ func TestElixirCarriesOverBetweenRounds(t *testing.T) {
 		t.Fatalf("before advance: got %d, want 2", gm.GetElixirDisplay(1))
 	}
 
-	// Advance to round 2 (cap becomes 4)
+	// Advance to round 2 (cap becomes 6)
 	gm.AdvanceRound()
 
 	// Elixir should still be 2 — no reset
@@ -106,32 +103,32 @@ func TestElixirCarriesOverBetweenRounds(t *testing.T) {
 		t.Errorf("after advance to round 2: got %d, want 2 (no reset)", gm.GetElixirDisplay(1))
 	}
 
-	// Now it can recharge up to 4
-	for i := 0; i < 40; i++ { // 40 ticks = 2 elixir
+	// Now it can recharge up to 6
+	for i := 0; i < 80; i++ { // 80 ticks = 4 elixir (2→6)
 		gm.TickElixir()
 	}
-	if gm.GetElixirDisplay(1) != 4 {
-		t.Errorf("after recharging to round 2 cap: got %d, want 4", gm.GetElixirDisplay(1))
+	if gm.GetElixirDisplay(1) != 6 {
+		t.Errorf("after recharging to round 2 cap: got %d, want 6", gm.GetElixirDisplay(1))
 	}
 
-	// Should not exceed 4 in round 2
+	// Should not exceed 6 in round 2
 	for i := 0; i < 20; i++ {
 		gm.TickElixir()
 	}
-	if gm.GetElixirDisplay(1) != 4 {
-		t.Errorf("should stay at round 2 cap 4: got %d", gm.GetElixirDisplay(1))
+	if gm.GetElixirDisplay(1) != 6 {
+		t.Errorf("should stay at round 2 cap 6: got %d", gm.GetElixirDisplay(1))
 	}
 }
 
 func TestElixirMaxCap8(t *testing.T) {
 	gm := newTestManager()
 
-	// Advance to round 6+ where cap is 8
-	for i := 0; i < 6; i++ {
+	// Advance to round 4+ where cap is 8 (starts at 5, +1 per round)
+	for i := 0; i < 3; i++ {
 		gm.AdvanceRound()
 	}
 	if gm.game.ElixirCap != 8 {
-		t.Fatalf("round 7 cap: got %d, want 8", gm.game.ElixirCap)
+		t.Fatalf("round 4 cap: got %d, want 8", gm.game.ElixirCap)
 	}
 
 	// Spend all elixir
@@ -410,12 +407,13 @@ func TestBothPlayersIndependent(t *testing.T) {
 		t.Errorf("player2 should be unaffected: got %d, want 3", gm.GetElixirDisplay(2))
 	}
 
-	// Tick — player 1 recharges, player 2 stays at cap
+	// Tick — player 1 recharges, player 2 also recharges (below cap of 5)
 	gm.TickElixir()
 	if gm.GetMilliElixir(1) != MilliElixirPerTick {
 		t.Errorf("player1 after tick: got %d, want %d", gm.GetMilliElixir(1), MilliElixirPerTick)
 	}
-	if gm.GetMilliElixir(2) != 3*MilliElixirPerElixir {
-		t.Errorf("player2 should stay at cap: got %d, want %d", gm.GetMilliElixir(2), 3*MilliElixirPerElixir)
+	// Player 2 started at 3 (3000), cap is 5 (5000), so it ticks up
+	if gm.GetMilliElixir(2) != 3*MilliElixirPerElixir+MilliElixirPerTick {
+		t.Errorf("player2 should tick up: got %d, want %d", gm.GetMilliElixir(2), 3*MilliElixirPerElixir+MilliElixirPerTick)
 	}
 }

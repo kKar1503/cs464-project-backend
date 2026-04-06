@@ -38,7 +38,8 @@ const (
 	MilliElixirPerTick   = MilliElixirPerElixir / (TickRate * ElixirChargeSeconds) // 50
 	MaxElixir            = 8
 	MaxMilliElixir       = MaxElixir * MilliElixirPerElixir
-	StartingElixir       = 3
+	StartingElixir       = 3  // elixir amount at round 1
+	StartingElixirCap    = 5  // elixir cap at round 1
 	LeaderAttack = 10 // leader counterattack damage
 )
 
@@ -96,7 +97,7 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 			BoardPlayer1:       &boardPlayer1,
 			BoardPlayer2:       &boardPlayer2,
 			RoundNumber:        1,
-			ElixirCap:          StartingElixir,
+			ElixirCap:          StartingElixirCap,
 			Player1Hand:        &PlayerHand{},
 			Player2Hand:        &PlayerHand{},
 		},
