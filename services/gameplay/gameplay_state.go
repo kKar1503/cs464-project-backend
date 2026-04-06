@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -21,34 +20,62 @@ type HandCard struct {
 
 // PlayerHand tracks the draw state for a single player.
 type PlayerHand struct {
-	Deck          []HandCard `json:"deck"`           // full deck (12 cards, set at game start)
-	Remaining     []HandCard `json:"remaining"`      // cards not yet drawn
-	Offered       []HandCard `json:"offered"`         // 5 cards offered this pre-turn (subset of remaining)
-	Hand          []HandCard `json:"hand"`            // cards the player has picked (persists across turns)
-	DrawnCardIDs  map[int]bool `json:"-"`             // card IDs already drawn in previous turns
+	Deck         []HandCard   `json:"deck"`
+	Remaining    []HandCard   `json:"remaining"`
+	Offered      []HandCard   `json:"offered"`
+	Hand         []HandCard   `json:"hand"`
+	DrawnCardIDs map[int]bool `json:"-"`
 }
 
 const (
-	MilliElixirPerElixir = 1000                              // 1 elixir = 1000 milliElixir
-	ElixirChargeSeconds  = 5                                 // 1 elixir charges every 5 seconds
-	MilliElixirPerTick   = MilliElixirPerElixir / (TickRate * ElixirChargeSeconds) // 50 per tick at 4 ticks/sec
-	MaxElixir            = 8                                 // max elixir a player can hold
-	MaxMilliElixir       = MaxElixir * MilliElixirPerElixir  // 8000
-	StartingElixir       = 3                                 // elixir at round 1
+	MilliElixirPerElixir = 1000
+	ElixirChargeSeconds  = 5
+	MilliElixirPerTick   = MilliElixirPerElixir / (TickRate * ElixirChargeSeconds) // 50
+	MaxElixir            = 8
+	MaxMilliElixir       = MaxElixir * MilliElixirPerElixir
+	StartingElixir       = 3
+	LeaderAttack         = 10 // leader counterattack damage
+	AttackCooldownTicks  = 12 // 3 seconds between attack resolutions (animation time)
 )
+
+// PendingAttack represents a card ready to attack, waiting in the attack queue.
+type PendingAttack struct {
+	IsPlayer1 bool
+	Row, Col  int
+}
+
+// AttackEvent records a single attack resolution for broadcast to clients.
+type AttackEvent struct {
+	AttackerCardID int  `json:"attacker_card_id"`
+	AttackerRow    int  `json:"attacker_row"`
+	AttackerCol    int  `json:"attacker_col"`
+	TargetCardID   int  `json:"target_card_id"`
+	TargetRow      int  `json:"target_row"`
+	TargetCol      int  `json:"target_col"`
+	Damage         int  `json:"damage"`
+	CounterDamage  int  `json:"counter_damage"`
+	TargetIsLeader bool `json:"target_is_leader"`
+}
 
 type GameplayState struct {
 	SessionID          string
 	Player1Health      int
 	Player2Health      int
-	MilliElixirPlayer1 int // stored as milliElixir (1000 = 1 elixir)
+	Player1LeaderAtk   int
+	Player2LeaderAtk   int
+	MilliElixirPlayer1 int
 	MilliElixirPlayer2 int
 	BoardPlayer1       *[2][3]handlers.Card
 	BoardPlayer2       *[2][3]handlers.Card
 	RoundNumber        int
-	ElixirCap          int // current max elixir for this round (3 at round 1, +1 per round, max 8)
+	ElixirCap          int
 	Player1Hand        *PlayerHand
 	Player2Hand        *PlayerHand
+
+	// Attack queue
+	AttackQueue         []PendingAttack
+	AttackCooldown      int // ticks remaining before next attack resolves
+	LastAttackLog       []AttackEvent // attacks resolved in the most recent tick
 }
 
 // GameplayManager manages gameplay state. All methods are called from the
@@ -67,12 +94,14 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 			SessionID:          sessionID,
 			Player1Health:      250,
 			Player2Health:      250,
+			Player1LeaderAtk:   LeaderAttack,
+			Player2LeaderAtk:   LeaderAttack,
 			MilliElixirPlayer1: StartingElixir * MilliElixirPerElixir,
 			MilliElixirPlayer2: StartingElixir * MilliElixirPerElixir,
 			BoardPlayer1:       &boardPlayer1,
 			BoardPlayer2:       &boardPlayer2,
 			RoundNumber:        1,
-			ElixirCap:          StartingElixir, // round 1 cap = 3
+			ElixirCap:          StartingElixir,
 			Player1Hand:        &PlayerHand{DrawnCardIDs: make(map[int]bool)},
 			Player2Hand:        &PlayerHand{DrawnCardIDs: make(map[int]bool)},
 		},
@@ -81,7 +110,171 @@ func NewGameplayManager(sessionID string, player1ID int64, player2ID int64) *Gam
 	}
 }
 
-// SetPlayerDeck sets the deck for a player (called at game start after loading from DB).
+// ──────────────────────────────────────────────
+// Board / Combat
+// ──────────────────────────────────────────────
+
+// TickBoard processes one tick of board state: charge cards, queue attacks, resolve one attack.
+// Returns true if any state changed.
+func (gh *GameplayManager) TickBoard() bool {
+	changed := false
+	g := gh.game
+
+	// 1. Tick charge timers for all cards on both boards
+	for r := 0; r < 2; r++ {
+		for c := 0; c < 3; c++ {
+			if g.BoardPlayer1[r][c].CardID != 0 && g.BoardPlayer1[r][c].IsCharging {
+				g.BoardPlayer1[r][c].ChargeTicksRemaining--
+				if g.BoardPlayer1[r][c].ChargeTicksRemaining <= 0 {
+					g.BoardPlayer1[r][c].IsCharging = false
+					g.AttackQueue = append(g.AttackQueue, PendingAttack{IsPlayer1: true, Row: r, Col: c})
+				}
+				changed = true
+			}
+			if g.BoardPlayer2[r][c].CardID != 0 && g.BoardPlayer2[r][c].IsCharging {
+				g.BoardPlayer2[r][c].ChargeTicksRemaining--
+				if g.BoardPlayer2[r][c].ChargeTicksRemaining <= 0 {
+					g.BoardPlayer2[r][c].IsCharging = false
+					g.AttackQueue = append(g.AttackQueue, PendingAttack{IsPlayer1: false, Row: r, Col: c})
+				}
+				changed = true
+			}
+		}
+	}
+
+	// 2. Resolve attacks from queue (one per cooldown period)
+	g.LastAttackLog = nil
+	if g.AttackCooldown > 0 {
+		g.AttackCooldown--
+	}
+	if g.AttackCooldown <= 0 && len(g.AttackQueue) > 0 {
+		attack := g.AttackQueue[0]
+		g.AttackQueue = g.AttackQueue[1:]
+		if event := gh.resolveAttack(attack); event != nil {
+			g.LastAttackLog = append(g.LastAttackLog, *event)
+			changed = true
+		}
+		g.AttackCooldown = AttackCooldownTicks
+	}
+
+	// 3. Clean up dead cards
+	for r := 0; r < 2; r++ {
+		for c := 0; c < 3; c++ {
+			if g.BoardPlayer1[r][c].CardID != 0 && g.BoardPlayer1[r][c].CurrentHealth <= 0 {
+				g.BoardPlayer1[r][c] = handlers.Card{}
+				changed = true
+			}
+			if g.BoardPlayer2[r][c].CardID != 0 && g.BoardPlayer2[r][c].CurrentHealth <= 0 {
+				g.BoardPlayer2[r][c] = handlers.Card{}
+				changed = true
+			}
+		}
+	}
+
+	return changed
+}
+
+// resolveAttack resolves a single attack from the queue.
+func (gh *GameplayManager) resolveAttack(attack PendingAttack) *AttackEvent {
+	g := gh.game
+
+	var attackerBoard, defenderBoard *[2][3]handlers.Card
+	var defenderHealth *int
+	var defenderLeaderAtk int
+
+	if attack.IsPlayer1 {
+		attackerBoard = g.BoardPlayer1
+		defenderBoard = g.BoardPlayer2
+		defenderHealth = &g.Player2Health
+		defenderLeaderAtk = g.Player2LeaderAtk
+	} else {
+		attackerBoard = g.BoardPlayer2
+		defenderBoard = g.BoardPlayer1
+		defenderHealth = &g.Player1Health
+		defenderLeaderAtk = g.Player1LeaderAtk
+	}
+
+	attacker := &attackerBoard[attack.Row][attack.Col]
+	if attacker.CardID == 0 {
+		return nil // attacker died before resolving
+	}
+
+	col := attack.Col
+	damage := attacker.CardAttack
+
+	event := &AttackEvent{
+		AttackerCardID: attacker.CardID,
+		AttackerRow:    attack.Row,
+		AttackerCol:    attack.Col,
+		Damage:         damage,
+	}
+
+	// Find target: front row first, then back row, then leader
+	if defenderBoard[0][col].CardID != 0 {
+		// Hit front row card
+		target := &defenderBoard[0][col]
+		target.CurrentHealth -= damage
+		event.TargetCardID = target.CardID
+		event.TargetRow = 0
+		event.TargetCol = col
+	} else if defenderBoard[1][col].CardID != 0 {
+		// Hit back row card
+		target := &defenderBoard[1][col]
+		target.CurrentHealth -= damage
+		event.TargetCardID = target.CardID
+		event.TargetRow = 1
+		event.TargetCol = col
+	} else {
+		// Hit leader
+		*defenderHealth -= damage
+		event.TargetIsLeader = true
+		// Leader counterattacks
+		attacker.CurrentHealth -= defenderLeaderAtk
+		event.CounterDamage = defenderLeaderAtk
+	}
+
+	// Reset attacker's charge timer
+	attacker.ChargeTicksRemaining = handlers.ChargeTicksTotal
+	attacker.IsCharging = true
+
+	return event
+}
+
+// ──────────────────────────────────────────────
+// Card placement
+// ──────────────────────────────────────────────
+
+func (gh *GameplayManager) PlayCard(playerID int64, card *handlers.Card, row int, col int) error {
+	isPlayer1 := playerID == gh.player1ID
+	costInMilli := card.ElixerCost * MilliElixirPerElixir
+
+	if isPlayer1 {
+		if gh.game.MilliElixirPlayer1 < costInMilli {
+			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer1/MilliElixirPerElixir, card.ElixerCost)
+		}
+		if gh.game.BoardPlayer1[row][col].CardID != 0 {
+			return fmt.Errorf("board position [%d][%d] is occupied", row, col)
+		}
+		gh.game.BoardPlayer1[row][col] = *card
+		gh.game.MilliElixirPlayer1 -= costInMilli
+	} else {
+		if gh.game.MilliElixirPlayer2 < costInMilli {
+			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer2/MilliElixirPerElixir, card.ElixerCost)
+		}
+		if gh.game.BoardPlayer2[row][col].CardID != 0 {
+			return fmt.Errorf("board position [%d][%d] is occupied", row, col)
+		}
+		gh.game.BoardPlayer2[row][col] = *card
+		gh.game.MilliElixirPlayer2 -= costInMilli
+	}
+
+	return nil
+}
+
+// ──────────────────────────────────────────────
+// Hand / Draw
+// ──────────────────────────────────────────────
+
 func (gh *GameplayManager) SetPlayerDeck(playerID int64, deck []HandCard) {
 	hand := gh.getPlayerHand(playerID)
 	hand.Deck = deck
@@ -89,11 +282,9 @@ func (gh *GameplayManager) SetPlayerDeck(playerID int64, deck []HandCard) {
 	copy(hand.Remaining, deck)
 }
 
-// OfferCards picks 5 random cards from the player's remaining pool for the pre-turn phase.
 func (gh *GameplayManager) OfferCards(playerID int64) []HandCard {
 	hand := gh.getPlayerHand(playerID)
 
-	// Filter out already-drawn cards from remaining
 	var available []HandCard
 	for _, c := range hand.Remaining {
 		if !hand.DrawnCardIDs[c.CardID] {
@@ -101,7 +292,6 @@ func (gh *GameplayManager) OfferCards(playerID int64) []HandCard {
 		}
 	}
 
-	// Shuffle and pick up to 5
 	shuffled := make([]HandCard, len(available))
 	copy(shuffled, available)
 	for i := len(shuffled) - 1; i > 0; i-- {
@@ -117,11 +307,6 @@ func (gh *GameplayManager) OfferCards(playerID int64) []HandCard {
 	return hand.Offered
 }
 
-// SelectCards validates and adds selected cards to the player's hand.
-// Rules:
-//   - up to 4 cards from the offered set
-//   - all selected cards must be the same colour (colourless doesn't count as a colour)
-//   - cannot re-take cards already in hand from previous turns
 func (gh *GameplayManager) SelectCards(playerID int64, selectedIDs []int) error {
 	hand := gh.getPlayerHand(playerID)
 
@@ -129,16 +314,14 @@ func (gh *GameplayManager) SelectCards(playerID int64, selectedIDs []int) error 
 		return fmt.Errorf("can only select up to 4 cards")
 	}
 	if len(selectedIDs) == 0 {
-		return nil // selecting nothing is valid
+		return nil
 	}
 
-	// Build a lookup of offered cards
 	offeredMap := make(map[int]HandCard)
 	for _, c := range hand.Offered {
 		offeredMap[c.CardID] = c
 	}
 
-	// Validate all selected cards are in the offered set and not already drawn
 	var selected []HandCard
 	for _, id := range selectedIDs {
 		card, ok := offeredMap[id]
@@ -151,11 +334,10 @@ func (gh *GameplayManager) SelectCards(playerID int64, selectedIDs []int) error 
 		selected = append(selected, card)
 	}
 
-	// Validate colour constraint: all non-colourless cards must be the same colour
 	var requiredColour string
 	for _, c := range selected {
 		if c.Colour == "Grey" || c.Colour == "Colourless" {
-			continue // colourless doesn't count
+			continue
 		}
 		if requiredColour == "" {
 			requiredColour = c.Colour
@@ -164,18 +346,27 @@ func (gh *GameplayManager) SelectCards(playerID int64, selectedIDs []int) error 
 		}
 	}
 
-	// Add to hand and mark as drawn
 	for _, c := range selected {
 		hand.Hand = append(hand.Hand, c)
 		hand.DrawnCardIDs[c.CardID] = true
 	}
 
-	// Clear offered
 	hand.Offered = nil
 	return nil
 }
 
-// GetPlayerHand returns the hand state for a player.
+// RemoveFromHand removes the first instance of a card from the player's hand.
+func (gh *GameplayManager) RemoveFromHand(playerID int64, cardID int) error {
+	hand := gh.getPlayerHand(playerID)
+	for i, c := range hand.Hand {
+		if c.CardID == cardID {
+			hand.Hand = append(hand.Hand[:i], hand.Hand[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("card %d not found in hand", cardID)
+}
+
 func (gh *GameplayManager) GetPlayerHandState(playerID int64) *PlayerHand {
 	return gh.getPlayerHand(playerID)
 }
@@ -187,22 +378,19 @@ func (gh *GameplayManager) getPlayerHand(playerID int64) *PlayerHand {
 	return gh.game.Player2Hand
 }
 
-// TickElixir increments milliElixir for both players each tick.
-// Caps at the current round's elixir cap (not the absolute max).
-// Returns true if either player's elixir changed (for dirty flag).
+// ──────────────────────────────────────────────
+// Elixir
+// ──────────────────────────────────────────────
+
 func (gh *GameplayManager) TickElixir() bool {
 	capMilli := gh.game.ElixirCap * MilliElixirPerElixir
-
 	p1Before := gh.game.MilliElixirPlayer1
 	p2Before := gh.game.MilliElixirPlayer2
-
 	gh.game.MilliElixirPlayer1 = min(capMilli, gh.game.MilliElixirPlayer1+MilliElixirPerTick)
 	gh.game.MilliElixirPlayer2 = min(capMilli, gh.game.MilliElixirPlayer2+MilliElixirPerTick)
-
 	return gh.game.MilliElixirPlayer1 != p1Before || gh.game.MilliElixirPlayer2 != p2Before
 }
 
-// AdvanceRound increments the round number and raises the elixir cap by 1 (max 8).
 func (gh *GameplayManager) AdvanceRound() {
 	gh.game.RoundNumber++
 	if gh.game.ElixirCap < MaxElixir {
@@ -210,7 +398,6 @@ func (gh *GameplayManager) AdvanceRound() {
 	}
 }
 
-// GetElixirDisplay returns the whole elixir value for a player (for display/spending).
 func (gh *GameplayManager) GetElixirDisplay(playerID int64) int {
 	if playerID == gh.player1ID {
 		return gh.game.MilliElixirPlayer1 / MilliElixirPerElixir
@@ -218,7 +405,6 @@ func (gh *GameplayManager) GetElixirDisplay(playerID int64) int {
 	return gh.game.MilliElixirPlayer2 / MilliElixirPerElixir
 }
 
-// GetMilliElixir returns the raw milliElixir value for a player (for client-side smooth display).
 func (gh *GameplayManager) GetMilliElixir(playerID int64) int {
 	if playerID == gh.player1ID {
 		return gh.game.MilliElixirPlayer1
@@ -226,7 +412,6 @@ func (gh *GameplayManager) GetMilliElixir(playerID int64) int {
 	return gh.game.MilliElixirPlayer2
 }
 
-// CheckWinCondition returns whether the game is over and which player won (1 or 2).
 func (gh *GameplayManager) CheckWinCondition() (gameOver bool, winnerID int) {
 	if gh.game.Player1Health <= 0 {
 		return true, 2
@@ -235,69 +420,4 @@ func (gh *GameplayManager) CheckWinCondition() (gameOver bool, winnerID int) {
 		return true, 1
 	}
 	return false, 0
-}
-
-func (gh *GameplayManager) PlayCard(playerID int64, card *handlers.Card, xPos int, yPos int) error {
-	isPlayer1 := playerID == gh.player1ID
-	costInMilli := card.ElixerCost * MilliElixirPerElixir
-
-	if isPlayer1 {
-		if gh.game.MilliElixirPlayer1 < costInMilli {
-			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer1/MilliElixirPerElixir, card.ElixerCost)
-		}
-		if err := placeCard(xPos, yPos, gh.game.BoardPlayer1, card); err != nil {
-			return err
-		}
-		gh.game.MilliElixirPlayer1 -= costInMilli
-	} else {
-		if gh.game.MilliElixirPlayer2 < costInMilli {
-			return fmt.Errorf("not enough elixir: have %d, need %d", gh.game.MilliElixirPlayer2/MilliElixirPerElixir, card.ElixerCost)
-		}
-		if err := placeCard(xPos, yPos, gh.game.BoardPlayer2, card); err != nil {
-			return err
-		}
-		gh.game.MilliElixirPlayer2 -= costInMilli
-	}
-
-	return nil
-}
-
-func (gh *GameplayManager) AttackCard(playerID int64, attackX int, attackY int) error {
-	isPlayer1 := playerID == gh.player1ID
-	if isPlayer1 {
-		return attackBoard(attackX, attackY, gh.game.BoardPlayer1, gh.game.BoardPlayer2, &gh.game.Player2Health)
-	}
-	return attackBoard(attackX, attackY, gh.game.BoardPlayer2, gh.game.BoardPlayer1, &gh.game.Player1Health)
-}
-
-// attackBoard resolves an attack from one board position against the opposing board.
-func attackBoard(attackX int, attackY int, attackingPlayer *[2][3]handlers.Card, defendingPlayer *[2][3]handlers.Card, playerHealth *int) error {
-	if attackingPlayer[attackX][attackY].LastMessage.Sub(time.Now()) < time.Duration(attackingPlayer[attackX][attackY].TimeToAttack)*time.Second {
-		return errors.New("Attack Message sent too early")
-	}
-
-	if (*defendingPlayer)[0][attackY].CardID == 0 && (*defendingPlayer)[1][attackY].CardID == 0 {
-		*playerHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-	} else if (*defendingPlayer)[0][attackY].CardID == 0 {
-		(*defendingPlayer)[1][attackY].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		if (*defendingPlayer)[1][attackY].CurrentHealth <= 0 {
-			(*defendingPlayer)[1][attackY].CardID = 0
-		}
-	} else {
-		(*defendingPlayer)[0][attackY].CurrentHealth -= (*attackingPlayer)[attackX][attackY].CardAttack
-		if (*defendingPlayer)[0][attackY].CurrentHealth <= 0 {
-			(*defendingPlayer)[0][attackY].CardID = 0
-		}
-	}
-
-	attackingPlayer[attackX][attackY].LastMessage = time.Now()
-	return nil
-}
-
-func placeCard(xPos int, yPos int, board *[2][3]handlers.Card, card *handlers.Card) error {
-	if board[xPos][yPos].CardID != 0 {
-		return fmt.Errorf("Card already exists")
-	}
-	board[xPos][yPos] = *card
-	return nil
 }

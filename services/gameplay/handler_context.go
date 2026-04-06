@@ -192,10 +192,6 @@ func (gpa *GameplayAdapter) RemoveElixer(playerID int64, elixerToRemove int) {
 	}
 }
 
-func (gpa *GameplayAdapter) AttackCard(playerID int64, xPos int, yPos int) error {
-	return gpa.gameplay.AttackCard(playerID, xPos, yPos)
-}
-
 func (gpa *GameplayAdapter) PlaceCard(playerID int64, card *handlers.Card, xPos int, yPos int) error {
 	return gpa.gameplay.PlayCard(playerID, card, xPos, yPos)
 }
@@ -230,6 +226,10 @@ func (gpa *GameplayAdapter) GetHand(playerID int64) []handlers.HandCardInfo {
 		}
 	}
 	return result
+}
+
+func (gpa *GameplayAdapter) RemoveFromHand(playerID int64, cardID int) error {
+	return gpa.gameplay.RemoveFromHand(playerID, cardID)
 }
 
 func (gpa *GameplayAdapter) GetBoard(playerID int64) (yours *[2][3]handlers.Card, opponents *[2][3]handlers.Card) {
