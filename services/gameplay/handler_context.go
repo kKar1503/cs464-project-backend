@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"math/rand"
 
+	"github.com/kKar1503/cs464-backend/services/gameplay/effects"
 	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
 )
 
@@ -95,8 +97,7 @@ func (ctx *PlayerConnectionContext) IsPlayerTurn() bool {
 }
 
 // State modification — no-ops because the game loop is the single writer
-func (ctx *PlayerConnectionContext) LockState() {}
-
+func (ctx *PlayerConnectionContext) LockState()   {}
 func (ctx *PlayerConnectionContext) UnlockState() {}
 
 func (ctx *PlayerConnectionContext) IncrementSequence() {
@@ -174,7 +175,7 @@ func (ctx *PlayerConnectionContext) ExecuteServerAction(action string, params in
 	return serverCtx.ExecuteServerAction(GameAction(action), params)
 }
 
-// I do not know the point to this just follow like blind sheep
+// GameplayAdapter adapts main.GameplayManager to handlers.GameplayManager interface
 type GameplayAdapter struct {
 	gameplay *GameplayManager
 }
@@ -192,7 +193,7 @@ func (gpa *GameplayAdapter) RemoveElixir(playerID int64, elixirToRemove int) {
 	}
 }
 
-func (gpa *GameplayAdapter) PlaceCard(playerID int64, card *handlers.Card, row int, col int) error {
+func (gpa *GameplayAdapter) PlaceCard(playerID int64, card *effects.CardInstance, row int, col int) error {
 	return gpa.gameplay.PlayCard(playerID, card, row, col)
 }
 
@@ -224,25 +225,15 @@ func (gpa *GameplayAdapter) PlayFromHand(playerID int64, cardID int) (*handlers.
 	return &handlers.HandCardInfo{
 		CardID: card.CardID, CardName: card.CardName, Colour: card.Colour,
 		Rarity: card.Rarity, ManaCost: card.ManaCost, Attack: card.Attack, HP: card.HP,
+		Abilities: card.Abilities,
 	}, nil
 }
 
-func handCardsToInfo(cards []HandCard) []handlers.HandCardInfo {
-	result := make([]handlers.HandCardInfo, len(cards))
-	for i, c := range cards {
-		result[i] = handlers.HandCardInfo{
-			CardID: c.CardID, CardName: c.CardName, Colour: c.Colour,
-			Rarity: c.Rarity, ManaCost: c.ManaCost, Attack: c.Attack, HP: c.HP,
-		}
-	}
-	return result
-}
-
-func (gpa *GameplayAdapter) GetBoard(playerID int64) (yours *[2][3]handlers.Card, opponents *[2][3]handlers.Card) {
+func (gpa *GameplayAdapter) GetBoard(playerID int64) (yours *[2][3]*effects.CardInstance, opponents *[2][3]*effects.CardInstance) {
 	if playerID == gpa.gameplay.player1ID {
-		return gpa.gameplay.game.BoardPlayer1, gpa.gameplay.game.BoardPlayer2
+		return &gpa.gameplay.game.BoardPlayer1, &gpa.gameplay.game.BoardPlayer2
 	}
-	return gpa.gameplay.game.BoardPlayer2, gpa.gameplay.game.BoardPlayer1
+	return &gpa.gameplay.game.BoardPlayer2, &gpa.gameplay.game.BoardPlayer1
 }
 
 func (gpa *GameplayAdapter) GetPlayerHealth(playerID int64) (you *int, opponent *int) {
@@ -252,60 +243,62 @@ func (gpa *GameplayAdapter) GetPlayerHealth(playerID int64) (you *int, opponent 
 	return &gpa.gameplay.game.Player2Health, &gpa.gameplay.game.Player1Health
 }
 
+func (gpa *GameplayAdapter) GetCardStore() *effects.CardDefinitionStore {
+	return gpa.gameplay.CardStore
+}
+
+func (gpa *GameplayAdapter) GetRNG() *rand.Rand {
+	return gpa.gameplay.RNG
+}
+
+func (gpa *GameplayAdapter) GetElixirCap(playerID int64) *int {
+	return &gpa.gameplay.game.ElixirCap
+}
+
+func (gpa *GameplayAdapter) ReturnToHand(playerID int64, def *effects.CardDefinition) {
+	gpa.gameplay.ReturnCardToHand(playerID, def)
+}
+
+func (gpa *GameplayAdapter) IsPlayer1(playerID int64) bool {
+	return playerID == gpa.gameplay.player1ID
+}
+
+func (gpa *GameplayAdapter) FireSummonEffects(playerID int64, card *effects.CardInstance, row, col int) {
+	gpa.gameplay.FireSummonEffects(playerID, card, row, col)
+}
+
+func handCardsToInfo(cards []HandCard) []handlers.HandCardInfo {
+	result := make([]handlers.HandCardInfo, len(cards))
+	for i, c := range cards {
+		result[i] = handlers.HandCardInfo{
+			CardID: c.CardID, CardName: c.CardName, Colour: c.Colour,
+			Rarity: c.Rarity, ManaCost: c.ManaCost, Attack: c.Attack, HP: c.HP,
+			Abilities: c.Abilities,
+		}
+	}
+	return result
+}
+
 // GameStateAdapter adapts GameState to handlers.GameState interface
 type GameStateAdapter struct {
 	state *GameState
 }
 
-func (gsa *GameStateAdapter) GetPhase() string {
-	return string(gsa.state.Phase)
-}
-
-func (gsa *GameStateAdapter) SetPhase(phase string) {
-	gsa.state.Phase = GamePhase(phase)
-}
-
-func (gsa *GameStateAdapter) GetTurnNumber() int {
-	return gsa.state.TurnNumber
-}
-
-func (gsa *GameStateAdapter) SetTurnNumber(turn int) {
-	gsa.state.TurnNumber = turn
-}
-
-func (gsa *GameStateAdapter) GetCurrentPlayer() int {
-	return int(gsa.state.CurrentPlayer)
-}
-
-func (gsa *GameStateAdapter) SetCurrentPlayer(playerID int) {
-	gsa.state.CurrentPlayer = PlayerID(playerID)
-}
-
-func (gsa *GameStateAdapter) GetWinnerID() int {
-	return int(gsa.state.WinnerID)
-}
-
-func (gsa *GameStateAdapter) SetWinnerID(playerID int) {
-	gsa.state.WinnerID = PlayerID(playerID)
-}
+func (gsa *GameStateAdapter) GetPhase() string         { return string(gsa.state.Phase) }
+func (gsa *GameStateAdapter) SetPhase(phase string)     { gsa.state.Phase = GamePhase(phase) }
+func (gsa *GameStateAdapter) GetTurnNumber() int         { return gsa.state.TurnNumber }
+func (gsa *GameStateAdapter) SetTurnNumber(turn int)     { gsa.state.TurnNumber = turn }
+func (gsa *GameStateAdapter) GetCurrentPlayer() int      { return int(gsa.state.CurrentPlayer) }
+func (gsa *GameStateAdapter) SetCurrentPlayer(playerID int) { gsa.state.CurrentPlayer = PlayerID(playerID) }
+func (gsa *GameStateAdapter) GetWinnerID() int           { return int(gsa.state.WinnerID) }
+func (gsa *GameStateAdapter) SetWinnerID(playerID int)   { gsa.state.WinnerID = PlayerID(playerID) }
 
 // PlayerStateAdapter adapts PlayerState to handlers.PlayerState interface
 type PlayerStateAdapter struct {
 	state *PlayerState
 }
 
-func (psa *PlayerStateAdapter) GetUserID() int64 {
-	return psa.state.UserID
-}
-
-func (psa *PlayerStateAdapter) GetUsername() string {
-	return psa.state.Username
-}
-
-func (psa *PlayerStateAdapter) GetGameData() []byte {
-	return psa.state.GameData
-}
-
-func (psa *PlayerStateAdapter) SetGameData(data []byte) {
-	psa.state.GameData = data
-}
+func (psa *PlayerStateAdapter) GetUserID() int64      { return psa.state.UserID }
+func (psa *PlayerStateAdapter) GetUsername() string    { return psa.state.Username }
+func (psa *PlayerStateAdapter) GetGameData() []byte    { return psa.state.GameData }
+func (psa *PlayerStateAdapter) SetGameData(data []byte) { psa.state.GameData = data }

@@ -15,6 +15,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/websocket"
 	db "github.com/kKar1503/cs464-backend/db/sqlc"
+	"github.com/kKar1503/cs464-backend/services/gameplay/effects"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -76,6 +77,9 @@ func main() {
 	// Initialize game state manager
 	stateManager = NewGameStateManager()
 	log.Println("Game state manager initialized")
+
+	// Load card definitions from deck service (for transform/summon effects)
+	loadCardDefinitions()
 
 	// Start cleanup goroutine for inactive sessions
 	go sessionCleanupLoop()
@@ -222,29 +226,93 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// affiliationToColour maps affiliation IDs to colour names.
-var affiliationToColour = map[int]string{
-	0: "Grey",
-	1: "Grey",
-	2: "Red",
-	3: "Blue",
-	4: "Green",
-	5: "Purple",
-	6: "Yellow",
+// cardDefinitionStore holds all card definitions, loaded at startup.
+var cardDefinitionStore *effects.CardDefinitionStore
+
+type abilityJSON struct {
+	TriggerType string          `json:"trigger_type"`
+	EffectType  string          `json:"effect_type"`
+	Params      json.RawMessage `json:"params"`
 }
 
 // activeDeckResponse is the JSON response from the deck service's internal endpoint.
 type activeDeckResponse struct {
 	DeckID int `json:"deck_id"`
 	Cards  []struct {
-		CardID      int    `json:"card_id"`
-		CardName    string `json:"card_name"`
-		Affiliation int    `json:"affiliation"`
-		Rarity      string `json:"rarity"`
-		ManaCost    int    `json:"mana_cost"`
-		Attack      int    `json:"attack"`
-		HP          int    `json:"hp"`
+		CardID    int           `json:"card_id"`
+		CardName  string        `json:"card_name"`
+		Colour    string        `json:"colour"`
+		Rarity    string        `json:"rarity"`
+		ManaCost  int           `json:"mana_cost"`
+		Attack    int           `json:"attack"`
+		HP        int           `json:"hp"`
+		Abilities []abilityJSON `json:"abilities"`
 	} `json:"cards"`
+}
+
+// loadCardDefinitions fetches all card definitions from the deck service at startup.
+func loadCardDefinitions() {
+	deckServiceURL := os.Getenv("DECK_SERVICE_URL")
+	if deckServiceURL == "" {
+		deckServiceURL = "http://deck-service:8005"
+	}
+
+	resp, err := http.Get(fmt.Sprintf("%s/internal/card-definitions", deckServiceURL))
+	if err != nil {
+		log.Printf("WARNING: Failed to load card definitions from deck service: %v", err)
+		cardDefinitionStore = effects.NewCardDefinitionStore(nil)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("WARNING: Deck service returned %d for card definitions", resp.StatusCode)
+		cardDefinitionStore = effects.NewCardDefinitionStore(nil)
+		return
+	}
+
+	var result struct {
+		Cards []struct {
+			CardID    int           `json:"card_id"`
+			CardName  string        `json:"card_name"`
+			Colour    string        `json:"colour"`
+			Rarity    string        `json:"rarity"`
+			ManaCost  int           `json:"mana_cost"`
+			Attack    int           `json:"attack"`
+			HP        int           `json:"hp"`
+			Abilities []abilityJSON `json:"abilities"`
+		} `json:"cards"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("WARNING: Failed to decode card definitions: %v", err)
+		cardDefinitionStore = effects.NewCardDefinitionStore(nil)
+		return
+	}
+
+	var defs []*effects.CardDefinition
+	for _, c := range result.Cards {
+		var abilities []effects.AbilityDefinition
+		for _, a := range c.Abilities {
+			abilities = append(abilities, effects.AbilityDefinition{
+				TriggerType: a.TriggerType,
+				EffectType:  a.EffectType,
+				Params:      a.Params,
+			})
+		}
+		defs = append(defs, &effects.CardDefinition{
+			CardID:    c.CardID,
+			Name:      c.CardName,
+			Colour:    c.Colour,
+			Rarity:    c.Rarity,
+			Cost:      c.ManaCost,
+			BaseAtk:   c.Attack,
+			BaseHP:    c.HP,
+			Abilities: abilities,
+		})
+	}
+
+	cardDefinitionStore = effects.NewCardDefinitionStore(defs)
+	log.Printf("Loaded %d card definitions from deck service", len(defs))
 }
 
 // loadPlayerDeck calls the deck service to get a player's active deck and loads it into the session.
@@ -274,18 +342,23 @@ func loadPlayerDeck(session *GameSession, userID int64) {
 
 	var deck []HandCard
 	for _, c := range deckResp.Cards {
-		colour := affiliationToColour[c.Affiliation]
-		if colour == "" {
-			colour = "Grey"
+		var abilities []effects.AbilityDefinition
+		for _, a := range c.Abilities {
+			abilities = append(abilities, effects.AbilityDefinition{
+				TriggerType: a.TriggerType,
+				EffectType:  a.EffectType,
+				Params:      a.Params,
+			})
 		}
 		deck = append(deck, HandCard{
-			CardID:   c.CardID,
-			CardName: c.CardName,
-			Colour:   colour,
-			Rarity:   c.Rarity,
-			ManaCost: c.ManaCost,
-			Attack:   c.Attack,
-			HP:       c.HP,
+			CardID:    c.CardID,
+			CardName:  c.CardName,
+			Colour:    c.Colour,
+			Rarity:    c.Rarity,
+			ManaCost:  c.ManaCost,
+			Attack:    c.Attack,
+			HP:        c.HP,
+			Abilities: abilities,
 		})
 	}
 

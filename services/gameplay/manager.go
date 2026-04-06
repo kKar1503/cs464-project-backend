@@ -31,11 +31,13 @@ type GameSession struct {
 // NewGameSession creates a new game session
 func NewGameSession(sessionID string, player1ID, player2ID int64, player1Name, player2Name string) *GameSession {
 	now := time.Now()
+	gm := NewGameplayManager(sessionID, player1ID, player2ID)
+	gm.CardStore = cardDefinitionStore
 	session := &GameSession{
 		State:           NewGameState(sessionID, player1ID, player2ID, player1Name, player2Name),
 		SnapshotManager: NewSnapshotManager(sessionID, SnapshotBufferSize),
 		CreatedAt:       now,
-		GameplayManager: NewGameplayManager(sessionID, player1ID, player2ID),
+		GameplayManager: gm,
 		LastActivityAt:  now,
 	}
 	session.RoundTimer = NewRoundTimer(session)

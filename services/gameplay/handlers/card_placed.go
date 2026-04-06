@@ -3,13 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-)
 
-type CardPlaced struct {
-	CardID int `json:"card_id"`
-	Row    int `json:"row"`
-	Col    int `json:"col"`
-}
+	"github.com/kKar1503/cs464-backend/services/gameplay/effects"
+)
 
 func HandleCardPlaced(ctx HandlerContext, msg *ClientMessage) error {
 	if ctx.GetGameState().GetPhase() != "ACTIVE" {
@@ -38,21 +34,30 @@ func HandleCardPlaced(ctx HandlerContext, msg *ClientMessage) error {
 		return fmt.Errorf("not enough elixir: have %d, need %d", gm.GetElixir(playerID), handCard.ManaCost)
 	}
 
-	card := &Card{
-		CardID:               handCard.CardID,
-		CardName:             handCard.CardName,
-		ElixirCost:           handCard.ManaCost,
-		CurrentHealth:        handCard.HP,
-		MaxHealth:            handCard.HP,
-		CardAttack:           handCard.Attack,
-		Colour:               handCard.Colour,
-		ChargeTicksRemaining: ChargeTicksTotal,
-		IsCharging:           true,
+	// Build CardDefinition from hand card data
+	def := &effects.CardDefinition{
+		CardID:    handCard.CardID,
+		Name:      handCard.CardName,
+		Colour:    handCard.Colour,
+		Rarity:    handCard.Rarity,
+		Cost:      handCard.ManaCost,
+		BaseAtk:   handCard.Attack,
+		BaseHP:    handCard.HP,
+		Abilities: handCard.Abilities,
 	}
 
-	if err := gm.PlaceCard(playerID, card, req.Row, req.Col); err != nil {
+	// Create a CardInstance with resolved abilities
+	instance, err := effects.NewCardInstance(def, handCard.CardID)
+	if err != nil {
+		return fmt.Errorf("failed to create card instance: %w", err)
+	}
+
+	if err := gm.PlaceCard(playerID, instance, req.Row, req.Col); err != nil {
 		return err
 	}
+
+	// Fire summon effects
+	gm.FireSummonEffects(playerID, instance, req.Row, req.Col)
 
 	return nil
 }

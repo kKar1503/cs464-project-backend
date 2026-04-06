@@ -3,11 +3,13 @@ package main
 import (
 	"testing"
 
-	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
+	"github.com/kKar1503/cs464-backend/services/gameplay/effects"
 )
 
 func newTestManager() *GameplayManager {
-	return NewGameplayManager("test-session", 1, 2)
+	gm := NewGameplayManager("test-session", 1, 2)
+	gm.CardStore = effects.NewCardDefinitionStore(nil)
+	return gm
 }
 
 func TestInitialElixir(t *testing.T) {
@@ -31,7 +33,6 @@ func TestElixirCapAtRound1(t *testing.T) {
 		t.Fatalf("round 1 elixir cap: got %d, want %d", gm.game.ElixirCap, StartingElixirCap)
 	}
 
-	// Starting elixir (3) is below cap (5), ticking should increase
 	changed := gm.TickElixir()
 	if !changed {
 		t.Error("elixir should change when below cap")
@@ -41,14 +42,12 @@ func TestElixirCapAtRound1(t *testing.T) {
 func TestElixirRechargeAfterSpend(t *testing.T) {
 	gm := newTestManager()
 
-	// Spend 2 elixir (2000 milliElixir) from player 1
 	gm.game.MilliElixirPlayer1 -= 2 * MilliElixirPerElixir
 
 	if gm.GetElixirDisplay(1) != 1 {
 		t.Fatalf("after spending 2: got %d, want 1", gm.GetElixirDisplay(1))
 	}
 
-	// Tick 20 times = 1 elixir recharged (20 ticks * 50 milli = 1000)
 	for i := 0; i < 20; i++ {
 		gm.TickElixir()
 	}
@@ -56,7 +55,6 @@ func TestElixirRechargeAfterSpend(t *testing.T) {
 		t.Errorf("after 20 ticks (1 elixir): got %d, want 2", gm.GetElixirDisplay(1))
 	}
 
-	// Tick 20 more = 3 elixir
 	for i := 0; i < 20; i++ {
 		gm.TickElixir()
 	}
@@ -64,7 +62,6 @@ func TestElixirRechargeAfterSpend(t *testing.T) {
 		t.Errorf("after 40 ticks (2 elixir): got %d, want 3", gm.GetElixirDisplay(1))
 	}
 
-	// Tick 40 more = should reach cap of 5
 	for i := 0; i < 40; i++ {
 		gm.TickElixir()
 	}
@@ -88,30 +85,25 @@ func TestElixirCapIncreasesPerRound(t *testing.T) {
 func TestElixirCarriesOverBetweenRounds(t *testing.T) {
 	gm := newTestManager()
 
-	// Spend 1 elixir, leaving 2 at round 1
 	gm.game.MilliElixirPlayer1 -= 1 * MilliElixirPerElixir
 
 	if gm.GetElixirDisplay(1) != 2 {
 		t.Fatalf("before advance: got %d, want 2", gm.GetElixirDisplay(1))
 	}
 
-	// Advance to round 2 (cap becomes 6)
 	gm.AdvanceRound()
 
-	// Elixir should still be 2 — no reset
 	if gm.GetElixirDisplay(1) != 2 {
 		t.Errorf("after advance to round 2: got %d, want 2 (no reset)", gm.GetElixirDisplay(1))
 	}
 
-	// Now it can recharge up to 6
-	for i := 0; i < 80; i++ { // 80 ticks = 4 elixir (2→6)
+	for i := 0; i < 80; i++ {
 		gm.TickElixir()
 	}
 	if gm.GetElixirDisplay(1) != 6 {
 		t.Errorf("after recharging to round 2 cap: got %d, want 6", gm.GetElixirDisplay(1))
 	}
 
-	// Should not exceed 6 in round 2
 	for i := 0; i < 20; i++ {
 		gm.TickElixir()
 	}
@@ -123,7 +115,6 @@ func TestElixirCarriesOverBetweenRounds(t *testing.T) {
 func TestElixirMaxCap8(t *testing.T) {
 	gm := newTestManager()
 
-	// Advance to round 4+ where cap is 8 (starts at 5, +1 per round)
 	for i := 0; i < 3; i++ {
 		gm.AdvanceRound()
 	}
@@ -131,10 +122,8 @@ func TestElixirMaxCap8(t *testing.T) {
 		t.Fatalf("round 4 cap: got %d, want 8", gm.game.ElixirCap)
 	}
 
-	// Spend all elixir
 	gm.game.MilliElixirPlayer1 = 0
 
-	// Recharge to 8 (160 ticks = 8 elixir)
 	for i := 0; i < 160; i++ {
 		gm.TickElixir()
 	}
@@ -142,7 +131,6 @@ func TestElixirMaxCap8(t *testing.T) {
 		t.Errorf("full recharge to max: got %d, want 8", gm.GetElixirDisplay(1))
 	}
 
-	// Should not exceed 8
 	gm.TickElixir()
 	if gm.GetMilliElixir(1) != MaxMilliElixir {
 		t.Errorf("should not exceed max: got %d, want %d", gm.GetMilliElixir(1), MaxMilliElixir)
@@ -152,20 +140,16 @@ func TestElixirMaxCap8(t *testing.T) {
 func TestMilliElixirFractional(t *testing.T) {
 	gm := newTestManager()
 
-	// Spend all elixir
 	gm.game.MilliElixirPlayer1 = 0
 
-	// 1 tick = 50 milliElixir
 	gm.TickElixir()
 	if gm.GetMilliElixir(1) != MilliElixirPerTick {
 		t.Errorf("after 1 tick: got %d milliElixir, want %d", gm.GetMilliElixir(1), MilliElixirPerTick)
 	}
-	// Display should still be 0 (not yet 1 full elixir)
 	if gm.GetElixirDisplay(1) != 0 {
 		t.Errorf("display after 1 tick: got %d, want 0", gm.GetElixirDisplay(1))
 	}
 
-	// 10 ticks = 500 milliElixir = 0 display
 	for i := 0; i < 9; i++ {
 		gm.TickElixir()
 	}
@@ -176,7 +160,6 @@ func TestMilliElixirFractional(t *testing.T) {
 		t.Errorf("display after 10 ticks: got %d, want 0", gm.GetElixirDisplay(1))
 	}
 
-	// 20 ticks total = 1000 milliElixir = 1 display
 	for i := 0; i < 10; i++ {
 		gm.TickElixir()
 	}
@@ -188,11 +171,7 @@ func TestMilliElixirFractional(t *testing.T) {
 func TestPlayCardDeductsElixir(t *testing.T) {
 	gm := newTestManager()
 
-	card := &handlers.Card{
-		CardID:     1,
-		ElixirCost: 2,
-	}
-
+	card := makeTestCard(1, "TestCard", 2, 10, 10)
 	err := gm.PlayCard(1, card, 0, 0)
 	if err != nil {
 		t.Fatalf("PlayCard failed: %v", err)
@@ -209,40 +188,48 @@ func TestPlayCardDeductsElixir(t *testing.T) {
 func TestPlayCardNotEnoughElixir(t *testing.T) {
 	gm := newTestManager()
 
-	card := &handlers.Card{
-		CardID:     1,
-		ElixirCost: 5, // costs more than round 1 cap of 3
-	}
-
+	card := makeTestCard(1, "TestCard", 5, 10, 10)
 	err := gm.PlayCard(1, card, 0, 0)
 	if err == nil {
 		t.Error("should fail when not enough elixir")
 	}
 }
 
-func placeTestCard(gm *GameplayManager, isPlayer1 bool, row, col, cardID, atk, hp int) {
-	board := gm.game.BoardPlayer1
-	if !isPlayer1 {
-		board = gm.game.BoardPlayer2
+func makeTestCard(cardID int, name string, cost, atk, hp int) *effects.CardInstance {
+	def := &effects.CardDefinition{
+		CardID: cardID,
+		Name:   name,
+		Colour: "Grey",
+		Cost:   cost,
+		BaseAtk: atk,
+		BaseHP:  hp,
 	}
-	board[row][col] = handlers.Card{
-		CardID:               cardID,
-		CardName:             "TestCard",
-		CardAttack:           atk,
-		CurrentHealth:        hp,
-		MaxHealth:            hp,
-		ChargeTicksRemaining: handlers.ChargeTicksTotal,
+	return &effects.CardInstance{
+		InstanceID:           cardID,
+		Definition:           def,
+		CurrentAtk:           atk,
+		CurrentHP:            hp,
+		MaxHP:                hp,
+		ChargeTicksRemaining: effects.ChargeTicksTotal,
+		ChargeTicksTotal:     effects.ChargeTicksTotal,
 		IsCharging:           true,
+	}
+}
+
+func placeTestCard(gm *GameplayManager, isPlayer1 bool, row, col, cardID, atk, hp int) {
+	card := makeTestCard(cardID, "TestCard", 1, atk, hp)
+	if isPlayer1 {
+		gm.game.BoardPlayer1[row][col] = card
+	} else {
+		gm.game.BoardPlayer2[row][col] = card
 	}
 }
 
 func TestCardChargeAndAutoAttack(t *testing.T) {
 	gm := newTestManager()
 
-	// Place a card for player 1 in row 0, col 0
 	placeTestCard(gm, true, 0, 0, 1, 20, 10)
 
-	// Tick 39 times — card should still be charging
 	for i := 0; i < 39; i++ {
 		gm.TickBoard()
 	}
@@ -251,11 +238,9 @@ func TestCardChargeAndAutoAttack(t *testing.T) {
 		t.Errorf("card should have 1 tick remaining after 39, got %d", card.ChargeTicksRemaining)
 	}
 
-	// Tick once more — attack resolves instantly
 	gm.TickBoard()
 
-	// Should have hit leader (no enemies in column 0)
-	if gm.game.Player2Health != 230 { // 250 - 20
+	if gm.game.Player2Health != 230 {
 		t.Errorf("leader should take 20 damage: got HP %d, want 230", gm.game.Player2Health)
 	}
 }
@@ -263,26 +248,21 @@ func TestCardChargeAndAutoAttack(t *testing.T) {
 func TestAutoAttackHitsLeader(t *testing.T) {
 	gm := newTestManager()
 
-	// Place a card for player 1 — no enemy cards in column 0
 	placeTestCard(gm, true, 0, 0, 1, 20, 50)
 
-	// Charge fully — attack resolves on tick 40 (cooldown starts at 0)
 	for i := 0; i < 40; i++ {
 		gm.TickBoard()
 	}
 
-	// Player 2 leader should take 20 damage (250 - 20 = 230)
 	if gm.game.Player2Health != 230 {
 		t.Errorf("leader HP after attack: got %d, want 230", gm.game.Player2Health)
 	}
 
-	// Attacker should take counter damage (LeaderAttack = 10)
-	attackerHP := gm.game.BoardPlayer1[0][0].CurrentHealth
-	if attackerHP != 40 { // 50 - 10 = 40
+	attackerHP := gm.game.BoardPlayer1[0][0].CurrentHP
+	if attackerHP != 40 {
 		t.Errorf("attacker HP after leader counter: got %d, want 40", attackerHP)
 	}
 
-	// Combat log should have attack + counter_attack
 	if len(gm.game.CombatLog) != 2 {
 		t.Fatalf("expected 2 combat events (attack + counter), got %d", len(gm.game.CombatLog))
 	}
@@ -305,24 +285,22 @@ func TestAutoAttackHitsLeader(t *testing.T) {
 func TestAutoAttackHitsEnemyCard(t *testing.T) {
 	gm := newTestManager()
 
-	// Player 1 card in row 0, col 1
 	placeTestCard(gm, true, 0, 1, 1, 15, 50)
-	// Player 2 card in front row, col 1 (blocks the attack)
 	placeTestCard(gm, false, 0, 1, 2, 10, 20)
 
-	// Charge and resolve player 1's attack
 	for i := 0; i < 40; i++ {
 		gm.TickBoard()
 	}
 
-
-	// Enemy card should take 15 damage (20 - 15 = 5)
-	enemyHP := gm.game.BoardPlayer2[0][1].CurrentHealth
-	if enemyHP != 5 {
-		t.Errorf("enemy card HP: got %d, want 5", enemyHP)
+	enemyCard := gm.game.BoardPlayer2[0][1]
+	if enemyCard == nil || enemyCard.CurrentHP != 5 {
+		if enemyCard == nil {
+			t.Errorf("enemy card should still exist with 5 HP")
+		} else {
+			t.Errorf("enemy card HP: got %d, want 5", enemyCard.CurrentHP)
+		}
 	}
 
-	// Leader should not be damaged
 	if gm.game.Player2Health != 250 {
 		t.Errorf("leader should not be hit: got %d, want 250", gm.game.Player2Health)
 	}
@@ -331,46 +309,36 @@ func TestAutoAttackHitsEnemyCard(t *testing.T) {
 func TestCardDeathRemoval(t *testing.T) {
 	gm := newTestManager()
 
-	// Player 1 card with 30 attack
 	placeTestCard(gm, true, 0, 0, 1, 30, 50)
-	// Player 2 card with only 10 HP in same column
 	placeTestCard(gm, false, 0, 0, 2, 5, 10)
 
-	// Charge and resolve
 	for i := 0; i < 40; i++ {
 		gm.TickBoard()
 	}
 
-
-	// Enemy card should be dead and removed
-	if gm.game.BoardPlayer2[0][0].CardID != 0 {
-		t.Errorf("dead card should be removed, got CardID %d", gm.game.BoardPlayer2[0][0].CardID)
+	if gm.game.BoardPlayer2[0][0] != nil {
+		t.Errorf("dead card should be removed (nil)")
 	}
 }
 
 func TestMultipleCardsAttackSameTick(t *testing.T) {
 	gm := newTestManager()
 
-	// Place 2 cards that will charge at the same time
 	placeTestCard(gm, true, 0, 0, 1, 10, 50)
 	placeTestCard(gm, true, 0, 1, 2, 20, 50)
 
-	// Charge both fully — both resolve instantly on tick 40
 	for i := 0; i < 40; i++ {
 		gm.TickBoard()
 	}
 
-	// Both attacks hit leader (no enemies), total damage = 10 + 20 = 30
-	if gm.game.Player2Health != 220 { // 250 - 30
+	if gm.game.Player2Health != 220 {
 		t.Errorf("leader HP after both attacks: got %d, want 220", gm.game.Player2Health)
 	}
 
-	// Both attacks hit leader = 4 events (2 attacks + 2 counters)
 	if len(gm.game.CombatLog) != 4 {
 		t.Errorf("expected 4 combat events, got %d", len(gm.game.CombatLog))
 	}
 
-	// Both cards should have restarted charging
 	if !gm.game.BoardPlayer1[0][0].IsCharging {
 		t.Error("card at [0][0] should be charging again")
 	}
@@ -382,17 +350,13 @@ func TestMultipleCardsAttackSameTick(t *testing.T) {
 func TestWinConditionOnLeaderDeath(t *testing.T) {
 	gm := newTestManager()
 
-	// Set player 2 HP very low
 	gm.game.Player2Health = 5
 
-	// Place a strong card
 	placeTestCard(gm, true, 0, 0, 1, 10, 50)
 
-	// Charge and resolve — should kill leader
 	for i := 0; i < 40; i++ {
 		gm.TickBoard()
 	}
-
 
 	gameOver, winner := gm.CheckWinCondition()
 	if !gameOver {
@@ -406,20 +370,16 @@ func TestWinConditionOnLeaderDeath(t *testing.T) {
 func TestBothPlayersIndependent(t *testing.T) {
 	gm := newTestManager()
 
-	// Spend all of player 1's elixir
 	gm.game.MilliElixirPlayer1 = 0
 
-	// Player 2 should still be at 3
 	if gm.GetElixirDisplay(2) != 3 {
 		t.Errorf("player2 should be unaffected: got %d, want 3", gm.GetElixirDisplay(2))
 	}
 
-	// Tick — player 1 recharges, player 2 also recharges (below cap of 5)
 	gm.TickElixir()
 	if gm.GetMilliElixir(1) != MilliElixirPerTick {
 		t.Errorf("player1 after tick: got %d, want %d", gm.GetMilliElixir(1), MilliElixirPerTick)
 	}
-	// Player 2 started at 3 (3000), cap is 5 (5000), so it ticks up
 	if gm.GetMilliElixir(2) != 3*MilliElixirPerElixir+MilliElixirPerTick {
 		t.Errorf("player2 should tick up: got %d, want %d", gm.GetMilliElixir(2), 3*MilliElixirPerElixir+MilliElixirPerTick)
 	}

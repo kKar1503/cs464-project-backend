@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/kKar1503/cs464-backend/services/gameplay/effects"
 	"github.com/kKar1503/cs464-backend/services/gameplay/handlers"
 )
 
@@ -357,20 +358,21 @@ func handCardsToView(cards []HandCard) []HandCardView {
 	return result
 }
 
-func boardToView(board *[2][3]handlers.Card) []BoardCardView {
+func boardToView(board *[2][3]*effects.CardInstance) []BoardCardView {
 	var cards []BoardCardView
 	for r := 0; r < 2; r++ {
 		for c := 0; c < 3; c++ {
-			if board[r][c].CardID != 0 {
+			if board[r][c] != nil {
+				card := board[r][c]
 				cards = append(cards, BoardCardView{
-					CardID:               board[r][c].CardID,
-					CardName:             board[r][c].CardName,
-					Colour:               board[r][c].Colour,
-					CurrentHealth:        board[r][c].CurrentHealth,
-					MaxHealth:            board[r][c].MaxHealth,
-					CardAttack:           board[r][c].CardAttack,
-					ChargeTicksRemaining: board[r][c].ChargeTicksRemaining,
-					ChargeTicksTotal:     handlers.ChargeTicksTotal,
+					CardID:               card.Definition.CardID,
+					CardName:             card.Definition.Name,
+					Colour:               card.Definition.Colour,
+					CurrentHealth:        card.CurrentHP,
+					MaxHealth:            card.MaxHP,
+					CardAttack:           card.CurrentAtk,
+					ChargeTicksRemaining: card.ChargeTicksRemaining,
+					ChargeTicksTotal:     card.ChargeTicksTotal,
 					Row:                  r,
 					Col:                  c,
 				})
@@ -395,8 +397,8 @@ func (gl *GameLoop) broadcastTickUpdate() {
 			MilliElixir: gm.GetMilliElixir(gm.player1ID),
 			Elixir:      gm.GetElixirDisplay(gm.player1ID),
 			ElixirCap:   g.ElixirCap,
-			YourBoard:   boardToView(g.BoardPlayer1),
-			EnemyBoard:  boardToView(g.BoardPlayer2),
+			YourBoard:   boardToView(&g.BoardPlayer1),
+			EnemyBoard:  boardToView(&g.BoardPlayer2),
 			YourHP:      g.Player1Health,
 			EnemyHP:     g.Player2Health,
 			LeaderAtk:   g.Player1LeaderAtk,
@@ -417,8 +419,8 @@ func (gl *GameLoop) broadcastTickUpdate() {
 			MilliElixir: gm.GetMilliElixir(gm.player2ID),
 			Elixir:      gm.GetElixirDisplay(gm.player2ID),
 			ElixirCap:   g.ElixirCap,
-			YourBoard:   boardToView(g.BoardPlayer2),
-			EnemyBoard:  boardToView(g.BoardPlayer1),
+			YourBoard:   boardToView(&g.BoardPlayer2),
+			EnemyBoard:  boardToView(&g.BoardPlayer1),
 			YourHP:      g.Player2Health,
 			EnemyHP:     g.Player1Health,
 			LeaderAtk:   g.Player2LeaderAtk,
