@@ -184,6 +184,11 @@ func (gl *GameLoop) handleClientAction(event GameEvent) {
 		return
 	}
 
+	// Check if both players have drawn — transition to active phase
+	if gl.session.State.Phase == "BOTH_PLAYERS_DREW" {
+		gl.StartRound()
+	}
+
 	// Take snapshot
 	gl.session.SnapshotManager.TakeSnapshot(gl.session.State, msg.Action, event.PlayerID)
 
@@ -202,9 +207,12 @@ func (gl *GameLoop) handleRoundEnd() {
 
 	// Advance round in gameplay manager (increases elixir cap)
 	gl.session.GameplayManager.AdvanceRound()
+	gl.session.GameplayManager.ResetDrawState()
 
-	// Move to pre-turn phase for next round's draw step
+	// Move to pre-turn phase — offer cards to both players
 	gl.session.State.Phase = PhasePreTurn
+	gl.session.GameplayManager.OfferCards(gl.session.GameplayManager.player1ID)
+	gl.session.GameplayManager.OfferCards(gl.session.GameplayManager.player2ID)
 	gl.session.State.TurnNumber = gl.session.GameplayManager.game.RoundNumber
 	gl.session.State.LastUpdateAt = time.Now()
 

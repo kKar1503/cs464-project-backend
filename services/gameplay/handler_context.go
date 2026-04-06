@@ -232,6 +232,10 @@ func (gpa *GameplayAdapter) RemoveFromHand(playerID int64, cardID int) error {
 	return gpa.gameplay.RemoveFromHand(playerID, cardID)
 }
 
+func (gpa *GameplayAdapter) MarkPlayerDrew(playerID int64) bool {
+	return gpa.gameplay.MarkPlayerDrew(playerID)
+}
+
 func (gpa *GameplayAdapter) GetBoard(playerID int64) (yours *[2][3]handlers.Card, opponents *[2][3]handlers.Card) {
 	if playerID == gpa.gameplay.player1ID {
 		return gpa.gameplay.game.BoardPlayer1, gpa.gameplay.game.BoardPlayer2

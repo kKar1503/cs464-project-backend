@@ -42,15 +42,12 @@ func HandleJoinGame(ctx HandlerContext, msg *ClientMessage) error {
 			p2State.SetGameData(dataBytes)
 		}
 
-		// For now, just transition to Player 1's turn
-		state.SetPhase("PLAYER1_TURN")
+		// Start in pre-turn phase for card drawing
+		state.SetPhase("PRE_TURN")
 		state.SetTurnNumber(1)
 		ctx.UnlockState()
 
-		// Start turn timer for Player 1
-		ctx.StartTurnTimer(1)
-
-		log.Printf("Game initialized for session %s, turn timer started for Player 1", ctx.GetSessionID())
+		log.Printf("Game initialized for session %s, entering PRE_TURN", ctx.GetSessionID())
 	}
 
 	// Increment sequence and send state to both players

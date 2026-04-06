@@ -118,7 +118,7 @@ func (ctx *ServerActionContext) handleOpponentReconnect() error {
 func (ctx *ServerActionContext) handleGameStart() error {
 	state := ctx.Session.State
 
-	state.Phase = PhaseActive
+	state.Phase = PhasePreTurn
 	state.TurnNumber = 1
 
 	// TODO: Initialize decks, shuffle, deal starting hands

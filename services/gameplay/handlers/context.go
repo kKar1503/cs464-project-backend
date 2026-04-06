@@ -224,4 +224,5 @@ type GameplayManager interface {
 	SelectCards(playerID int64, selectedIDs []int) error
 	GetHand(playerID int64) []HandCardInfo
 	RemoveFromHand(playerID int64, cardID int) error
+	MarkPlayerDrew(playerID int64) bool
 }

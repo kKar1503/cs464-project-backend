@@ -64,6 +64,8 @@ type GameplayState struct {
 	ElixirCap          int
 	Player1Hand        *PlayerHand
 	Player2Hand        *PlayerHand
+	Player1DrewThisRound bool
+	Player2DrewThisRound bool
 
 	LastAttackLog []AttackEvent // attacks resolved in the most recent tick
 }
@@ -326,6 +328,23 @@ func (gh *GameplayManager) SelectCards(playerID int64, selectedIDs []int) error 
 
 	hand.Offered = nil
 	return nil
+}
+
+// MarkPlayerDrew marks a player as having completed their draw for this round.
+// Returns true if both players have now drawn (ready to start active phase).
+func (gh *GameplayManager) MarkPlayerDrew(playerID int64) bool {
+	if playerID == gh.player1ID {
+		gh.game.Player1DrewThisRound = true
+	} else {
+		gh.game.Player2DrewThisRound = true
+	}
+	return gh.game.Player1DrewThisRound && gh.game.Player2DrewThisRound
+}
+
+// ResetDrawState resets draw flags for a new round.
+func (gh *GameplayManager) ResetDrawState() {
+	gh.game.Player1DrewThisRound = false
+	gh.game.Player2DrewThisRound = false
 }
 
 // RemoveFromHand removes the first instance of a card from the player's hand.
