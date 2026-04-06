@@ -247,8 +247,8 @@ def main():
         p1.send_action("DRAW_CARDS", {"selected_card_ids": []})
         p2.send_action("DRAW_CARDS", {"selected_card_ids": []})
 
-        # Wait for ACTIVE
-        got_active = p1.wait_for_phase("ACTIVE", timeout=10)
+        # Wait for ACTIVE (pre-turn lasts 10 seconds)
+        got_active = p1.wait_for_phase("ACTIVE", timeout=15)
         assert_true(f"R{round_num}: P1 sees ACTIVE", got_active, f"phase={p1.latest_phase}")
 
         if not got_active:
