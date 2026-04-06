@@ -591,6 +591,16 @@ func (gh *GameplayManager) ClearSelectedThisTurn(playerID int64) {
 	hand.SelectedThisTurn = make(map[int]int)
 }
 
+func (gh *GameplayManager) GetHandCard(playerID int64, cardID int) (*HandCard, bool) {
+	hand := gh.getPlayerHand(playerID)
+	for i := range hand.Hand {
+		if hand.Hand[i].CardID == cardID {
+			return &hand.Hand[i], true
+		}
+	}
+	return nil, false
+}
+
 func (gh *GameplayManager) PlayFromHand(playerID int64, cardID int) (*HandCard, error) {
 	hand := gh.getPlayerHand(playerID)
 	for i, c := range hand.Hand {

@@ -57,6 +57,7 @@ type GameplayManager interface {
 	// Draw pile & hand
 	GetDrawPile(playerID int64) []HandCardInfo
 	GetHandCards(playerID int64) []HandCardInfo
+	GetHandCard(playerID int64, cardID int) (*HandCardInfo, bool)
 	SelectCard(playerID int64, cardID int) error
 	DeselectCard(playerID int64, cardID int) error
 	PlayFromHand(playerID int64, cardID int) (*HandCardInfo, error)

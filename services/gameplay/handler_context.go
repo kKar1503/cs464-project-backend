@@ -161,6 +161,18 @@ func (gpa *GameplayAdapter) GetHandCards(playerID int64) []handlers.HandCardInfo
 	return handCardsToInfo(gpa.gameplay.GetHand(playerID))
 }
 
+func (gpa *GameplayAdapter) GetHandCard(playerID int64, cardID int) (*handlers.HandCardInfo, bool) {
+	card, ok := gpa.gameplay.GetHandCard(playerID, cardID)
+	if !ok {
+		return nil, false
+	}
+	return &handlers.HandCardInfo{
+		CardID: card.CardID, CardName: card.CardName, Colour: card.Colour,
+		Rarity: card.Rarity, ManaCost: card.ManaCost, Attack: card.Attack, HP: card.HP,
+		Abilities: card.Abilities,
+	}, true
+}
+
 func (gpa *GameplayAdapter) SelectCard(playerID int64, cardID int) error {
 	return gpa.gameplay.SelectCard(playerID, cardID)
 }

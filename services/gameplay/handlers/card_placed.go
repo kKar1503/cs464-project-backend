@@ -24,14 +24,19 @@ func HandleCardPlaced(ctx HandlerContext, msg *ClientMessage) error {
 	gm := ctx.GetGameplayManager()
 	playerID := ctx.GetUserID()
 
-	// Take the card from the hand (also returns it to back of deck)
-	handCard, err := gm.PlayFromHand(playerID, req.CardID)
-	if err != nil {
-		return err
+	// Look up the card in hand to check elixir cost before removing it
+	handCard, ok := gm.GetHandCard(playerID, req.CardID)
+	if !ok {
+		return fmt.Errorf("card %d not in hand", req.CardID)
 	}
 
 	if gm.GetElixir(playerID) < handCard.ManaCost {
 		return fmt.Errorf("not enough elixir: have %d, need %d", gm.GetElixir(playerID), handCard.ManaCost)
+	}
+
+	// Now safe to remove from hand (returns it to back of deck)
+	if _, err := gm.PlayFromHand(playerID, req.CardID); err != nil {
+		return err
 	}
 
 	// Build CardDefinition from hand card data
