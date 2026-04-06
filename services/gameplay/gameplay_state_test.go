@@ -223,6 +223,199 @@ func TestPlayCardNotEnoughElixir(t *testing.T) {
 	}
 }
 
+func placeTestCard(gm *GameplayManager, isPlayer1 bool, row, col, cardID, atk, hp int) {
+	board := gm.game.BoardPlayer1
+	if !isPlayer1 {
+		board = gm.game.BoardPlayer2
+	}
+	board[row][col] = handlers.Card{
+		CardID:               cardID,
+		CardName:             "TestCard",
+		CardAttack:           atk,
+		CurrentHealth:        hp,
+		MaxHealth:            hp,
+		ChargeTicksRemaining: handlers.ChargeTicksTotal,
+		IsCharging:           true,
+	}
+}
+
+func TestCardChargeAndAutoAttack(t *testing.T) {
+	gm := newTestManager()
+
+	// Place a card for player 1 in row 0, col 0
+	placeTestCard(gm, true, 0, 0, 1, 20, 10)
+
+	// Tick 39 times — card should still be charging
+	for i := 0; i < 39; i++ {
+		gm.TickBoard()
+	}
+	card := gm.game.BoardPlayer1[0][0]
+	if card.ChargeTicksRemaining != 1 {
+		t.Errorf("card should have 1 tick remaining after 39, got %d", card.ChargeTicksRemaining)
+	}
+
+	// Tick once more — card fully charges, gets queued, and resolves immediately
+	// (cooldown starts at 0, so the attack resolves in the same tick it queues)
+	gm.TickBoard()
+
+	// Should have hit leader (no enemies in column 0)
+	if gm.game.Player2Health != 230 { // 250 - 20
+		t.Errorf("leader should take 20 damage: got HP %d, want 230", gm.game.Player2Health)
+	}
+}
+
+func TestAutoAttackHitsLeader(t *testing.T) {
+	gm := newTestManager()
+
+	// Place a card for player 1 — no enemy cards in column 0
+	placeTestCard(gm, true, 0, 0, 1, 20, 50)
+
+	// Charge fully — attack resolves on tick 40 (cooldown starts at 0)
+	for i := 0; i < 40; i++ {
+		gm.TickBoard()
+	}
+
+	// Player 2 leader should take 20 damage (250 - 20 = 230)
+	if gm.game.Player2Health != 230 {
+		t.Errorf("leader HP after attack: got %d, want 230", gm.game.Player2Health)
+	}
+
+	// Attacker should take counter damage (LeaderAttack = 10)
+	attackerHP := gm.game.BoardPlayer1[0][0].CurrentHealth
+	if attackerHP != 40 { // 50 - 10 = 40
+		t.Errorf("attacker HP after leader counter: got %d, want 40", attackerHP)
+	}
+
+	// Attack log should have the event
+	if len(gm.game.LastAttackLog) != 1 {
+		t.Fatalf("expected 1 attack event, got %d", len(gm.game.LastAttackLog))
+	}
+	event := gm.game.LastAttackLog[0]
+	if !event.TargetIsLeader {
+		t.Error("attack should target leader")
+	}
+	if event.CounterDamage != LeaderAttack {
+		t.Errorf("counter damage: got %d, want %d", event.CounterDamage, LeaderAttack)
+	}
+}
+
+func TestAutoAttackHitsEnemyCard(t *testing.T) {
+	gm := newTestManager()
+
+	// Player 1 card in row 0, col 1
+	placeTestCard(gm, true, 0, 1, 1, 15, 50)
+	// Player 2 card in front row, col 1 (blocks the attack)
+	placeTestCard(gm, false, 0, 1, 2, 10, 20)
+
+	// Charge and resolve player 1's attack
+	for i := 0; i < 40; i++ {
+		gm.TickBoard()
+	}
+	gm.game.AttackCooldown = 0
+	gm.TickBoard()
+
+	// Enemy card should take 15 damage (20 - 15 = 5)
+	enemyHP := gm.game.BoardPlayer2[0][1].CurrentHealth
+	if enemyHP != 5 {
+		t.Errorf("enemy card HP: got %d, want 5", enemyHP)
+	}
+
+	// Leader should not be damaged
+	if gm.game.Player2Health != 250 {
+		t.Errorf("leader should not be hit: got %d, want 250", gm.game.Player2Health)
+	}
+}
+
+func TestCardDeathRemoval(t *testing.T) {
+	gm := newTestManager()
+
+	// Player 1 card with 30 attack
+	placeTestCard(gm, true, 0, 0, 1, 30, 50)
+	// Player 2 card with only 10 HP in same column
+	placeTestCard(gm, false, 0, 0, 2, 5, 10)
+
+	// Charge and resolve
+	for i := 0; i < 40; i++ {
+		gm.TickBoard()
+	}
+	gm.game.AttackCooldown = 0
+	gm.TickBoard()
+
+	// Enemy card should be dead and removed
+	if gm.game.BoardPlayer2[0][0].CardID != 0 {
+		t.Errorf("dead card should be removed, got CardID %d", gm.game.BoardPlayer2[0][0].CardID)
+	}
+}
+
+func TestAttackQueueFIFO(t *testing.T) {
+	gm := newTestManager()
+
+	// Place 2 cards that will charge at the same time
+	placeTestCard(gm, true, 0, 0, 1, 10, 50)
+	placeTestCard(gm, true, 0, 1, 2, 20, 50)
+
+	// Charge both fully — on tick 40:
+	// Both get queued, first one resolves immediately (cooldown was 0)
+	// Second stays in queue with cooldown set
+	for i := 0; i < 40; i++ {
+		gm.TickBoard()
+	}
+
+	// First attack should have resolved (hit leader col 0), second still queued
+	if len(gm.game.AttackQueue) != 1 {
+		t.Fatalf("expected 1 attack remaining in queue, got %d", len(gm.game.AttackQueue))
+	}
+
+	// The remaining attack should be col 1
+	remaining := gm.game.AttackQueue[0]
+	if remaining.Col != 1 {
+		t.Errorf("remaining attack should be col 1, got col %d", remaining.Col)
+	}
+
+	// Cooldown should be set
+	if gm.game.AttackCooldown != AttackCooldownTicks {
+		t.Errorf("cooldown should be %d, got %d", AttackCooldownTicks, gm.game.AttackCooldown)
+	}
+
+	// Wait for cooldown, then second attack resolves
+	for i := 0; i < AttackCooldownTicks; i++ {
+		gm.TickBoard()
+	}
+	if len(gm.game.AttackQueue) != 0 {
+		t.Errorf("queue should be empty after cooldown, got %d", len(gm.game.AttackQueue))
+	}
+
+	// Both attacks hit leader (no enemies), total damage = 10 + 20 = 30
+	if gm.game.Player2Health != 220 { // 250 - 30
+		t.Errorf("leader HP after both attacks: got %d, want 220", gm.game.Player2Health)
+	}
+}
+
+func TestWinConditionOnLeaderDeath(t *testing.T) {
+	gm := newTestManager()
+
+	// Set player 2 HP very low
+	gm.game.Player2Health = 5
+
+	// Place a strong card
+	placeTestCard(gm, true, 0, 0, 1, 10, 50)
+
+	// Charge and resolve — should kill leader
+	for i := 0; i < 40; i++ {
+		gm.TickBoard()
+	}
+	gm.game.AttackCooldown = 0
+	gm.TickBoard()
+
+	gameOver, winner := gm.CheckWinCondition()
+	if !gameOver {
+		t.Error("game should be over")
+	}
+	if winner != 1 {
+		t.Errorf("winner should be 1 (player 2 died), got %d", winner)
+	}
+}
+
 func TestBothPlayersIndependent(t *testing.T) {
 	gm := newTestManager()
 
