@@ -18,9 +18,19 @@ type PackResponse struct {
 }
 
 type OpenPackResponse struct {
-	PackID   int64      `json:"pack_id"`
-	PackType string     `json:"pack_type"`
-	Cards    []PackCard `json:"cards"`
+	PackID          int64      `json:"pack_id"`
+	PackType        string     `json:"pack_type"`
+	Cards           []PackCard `json:"cards"`
+	CrystalsAwarded int32      `json:"crystals_awarded"`
+	CrystalsTotal   int32      `json:"crystals_total"`
+}
+
+// crystalsPerPack maps pack type → crystals awarded on open.
+var crystalsPerPack = map[string]int32{
+	"common":    100,
+	"rare":      500,
+	"epic":      1000,
+	"legendary": 5000,
 }
 
 type PackCard struct {
@@ -118,10 +128,29 @@ func handleOpenPack(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	crystals := crystalsPerPack[pack.PackType]
+	if crystals > 0 {
+		if err := queries.AddPlayerCrystals(ctx, db.AddPlayerCrystalsParams{
+			Crystals: crystals,
+			ID:       userID,
+		}); err != nil {
+			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to award crystals"})
+			return
+		}
+	}
+
+	total, err := queries.GetPlayerCrystals(ctx, userID)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load crystals"})
+		return
+	}
+
 	respondJSON(w, http.StatusOK, OpenPackResponse{
-		PackID:   packID,
-		PackType: pack.PackType,
-		Cards:    cards,
+		PackID:          packID,
+		PackType:        pack.PackType,
+		Cards:           cards,
+		CrystalsAwarded: crystals,
+		CrystalsTotal:   total,
 	})
 }
 
