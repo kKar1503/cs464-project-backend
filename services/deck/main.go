@@ -55,6 +55,11 @@ func main() {
 	mux.HandleFunc("GET /cards", handleGetAllCards)
 	mux.HandleFunc("GET /players/me/cards", handleGetPlayerCards)
 	mux.HandleFunc("GET /players/me/cards/available", handleGetCardsNotInDecks)
+	mux.HandleFunc("POST /players/me/cards/{cardId}/level-up", handleLevelUpCard)
+	mux.HandleFunc("POST /players/me/cards/{cardId}/disenchant", handleDisenchantCard)
+
+	// Currency routes
+	mux.HandleFunc("GET /players/me/crystals", handleGetCrystals)
 
 	// Deck routes
 	mux.HandleFunc("PUT /players/me/decks", handleUpdateAllDecks)
@@ -70,6 +75,7 @@ func main() {
 	mux.HandleFunc("POST /internal/starter-content", handleInitStarterContent)
 	mux.HandleFunc("GET /internal/active-deck", handleGetActiveDeckForGame)
 	mux.HandleFunc("GET /internal/card-definitions", handleGetAllCardDefinitions)
+	mux.HandleFunc("GET /internal/validate-active-deck", handleValidateActiveDeckForMatchmaking)
 
 	// Pack routes
 	mux.HandleFunc("POST /packs", handleBuyPack)
