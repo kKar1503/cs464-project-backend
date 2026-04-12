@@ -12,6 +12,20 @@ import (
 	"time"
 )
 
+const addPlayerCrystals = `-- name: AddPlayerCrystals :exec
+UPDATE users SET crystals = crystals + ? WHERE id = ?
+`
+
+type AddPlayerCrystalsParams struct {
+	Crystals int32 `json:"crystals"`
+	ID       int64 `json:"id"`
+}
+
+func (q *Queries) AddPlayerCrystals(ctx context.Context, arg AddPlayerCrystalsParams) error {
+	_, err := q.db.ExecContext(ctx, addPlayerCrystals, arg.Crystals, arg.ID)
+	return err
+}
+
 const createDeck = `-- name: CreateDeck :execresult
 INSERT INTO decks (player_id, name) VALUES (?, ?)
 `
@@ -38,6 +52,20 @@ func (q *Queries) CreatePack(ctx context.Context, arg CreatePackParams) (sql.Res
 	return q.db.ExecContext(ctx, createPack, arg.PlayerID, arg.PackType)
 }
 
+const deductPlayerCrystals = `-- name: DeductPlayerCrystals :execresult
+UPDATE users SET crystals = crystals - ? WHERE id = ? AND crystals >= ?
+`
+
+type DeductPlayerCrystalsParams struct {
+	Crystals   int32 `json:"crystals"`
+	ID         int64 `json:"id"`
+	Crystals_2 int32 `json:"crystals_2"`
+}
+
+func (q *Queries) DeductPlayerCrystals(ctx context.Context, arg DeductPlayerCrystalsParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, deductPlayerCrystals, arg.Crystals, arg.ID, arg.Crystals_2)
+}
+
 const deleteDeck = `-- name: DeleteDeck :execresult
 DELETE FROM decks WHERE deck_id = ? AND player_id = ?
 `
@@ -58,6 +86,34 @@ DELETE FROM deck_cards WHERE deck_id = ?
 func (q *Queries) DeleteDeckCards(ctx context.Context, deckID int32) error {
 	_, err := q.db.ExecContext(ctx, deleteDeckCards, deckID)
 	return err
+}
+
+const disenchantPlayerCard = `-- name: DisenchantPlayerCard :execresult
+UPDATE player_cards pc
+JOIN cards c ON c.card_id = pc.card_id
+SET pc.quantity = pc.quantity - ?
+WHERE pc.player_id = ? AND pc.card_id = ?
+  AND pc.level = c.max_level
+  AND pc.quantity >= ?
+`
+
+type DisenchantPlayerCardParams struct {
+	Quantity   int32 `json:"quantity"`
+	PlayerID   int64 `json:"player_id"`
+	CardID     int32 `json:"card_id"`
+	Quantity_2 int32 `json:"quantity_2"`
+}
+
+// Removes `quantity_to_remove` copies from a maxed-out player card.
+// Caller must pass `min_quantity = quantity_to_remove + 1` so the player
+// retains at least one copy. Gated on level = max_level (atomic).
+func (q *Queries) DisenchantPlayerCard(ctx context.Context, arg DisenchantPlayerCardParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, disenchantPlayerCard,
+		arg.Quantity,
+		arg.PlayerID,
+		arg.CardID,
+		arg.Quantity_2,
+	)
 }
 
 const getAbilitiesForDeck = `-- name: GetAbilitiesForDeck :many
@@ -209,15 +265,25 @@ SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards ORDER BY card_id ASC
 `
 
-func (q *Queries) GetAllCards(ctx context.Context) ([]Card, error) {
+type GetAllCardsRow struct {
+	CardID      int32  `json:"card_id"`
+	CardName    string `json:"card_name"`
+	Affiliation int32  `json:"affiliation"`
+	Rarity      string `json:"rarity"`
+	ManaCost    int32  `json:"mana_cost"`
+	Description string `json:"description"`
+	IconUrl     string `json:"icon_url"`
+}
+
+func (q *Queries) GetAllCards(ctx context.Context) ([]GetAllCardsRow, error) {
 	rows, err := q.db.QueryContext(ctx, getAllCards)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Card{}
+	items := []GetAllCardsRow{}
 	for rows.Next() {
-		var i Card
+		var i GetAllCardsRow
 		if err := rows.Scan(
 			&i.CardID,
 			&i.CardName,
@@ -245,15 +311,25 @@ SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards WHERE affiliation = ? ORDER BY card_id ASC
 `
 
-func (q *Queries) GetAllCardsByAffiliation(ctx context.Context, affiliation int32) ([]Card, error) {
+type GetAllCardsByAffiliationRow struct {
+	CardID      int32  `json:"card_id"`
+	CardName    string `json:"card_name"`
+	Affiliation int32  `json:"affiliation"`
+	Rarity      string `json:"rarity"`
+	ManaCost    int32  `json:"mana_cost"`
+	Description string `json:"description"`
+	IconUrl     string `json:"icon_url"`
+}
+
+func (q *Queries) GetAllCardsByAffiliation(ctx context.Context, affiliation int32) ([]GetAllCardsByAffiliationRow, error) {
 	rows, err := q.db.QueryContext(ctx, getAllCardsByAffiliation, affiliation)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Card{}
+	items := []GetAllCardsByAffiliationRow{}
 	for rows.Next() {
-		var i Card
+		var i GetAllCardsByAffiliationRow
 		if err := rows.Scan(
 			&i.CardID,
 			&i.CardName,
@@ -281,15 +357,25 @@ SELECT card_id, card_name, affiliation, rarity, mana_cost, description, icon_url
 FROM cards WHERE rarity = ? ORDER BY card_id ASC
 `
 
-func (q *Queries) GetAllCardsByRarity(ctx context.Context, rarity string) ([]Card, error) {
+type GetAllCardsByRarityRow struct {
+	CardID      int32  `json:"card_id"`
+	CardName    string `json:"card_name"`
+	Affiliation int32  `json:"affiliation"`
+	Rarity      string `json:"rarity"`
+	ManaCost    int32  `json:"mana_cost"`
+	Description string `json:"description"`
+	IconUrl     string `json:"icon_url"`
+}
+
+func (q *Queries) GetAllCardsByRarity(ctx context.Context, rarity string) ([]GetAllCardsByRarityRow, error) {
 	rows, err := q.db.QueryContext(ctx, getAllCardsByRarity, rarity)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Card{}
+	items := []GetAllCardsByRarityRow{}
 	for rows.Next() {
-		var i Card
+		var i GetAllCardsByRarityRow
 		if err := rows.Scan(
 			&i.CardID,
 			&i.CardName,
@@ -322,15 +408,25 @@ type GetAllCardsByRarityAndAffiliationParams struct {
 	Affiliation int32  `json:"affiliation"`
 }
 
-func (q *Queries) GetAllCardsByRarityAndAffiliation(ctx context.Context, arg GetAllCardsByRarityAndAffiliationParams) ([]Card, error) {
+type GetAllCardsByRarityAndAffiliationRow struct {
+	CardID      int32  `json:"card_id"`
+	CardName    string `json:"card_name"`
+	Affiliation int32  `json:"affiliation"`
+	Rarity      string `json:"rarity"`
+	ManaCost    int32  `json:"mana_cost"`
+	Description string `json:"description"`
+	IconUrl     string `json:"icon_url"`
+}
+
+func (q *Queries) GetAllCardsByRarityAndAffiliation(ctx context.Context, arg GetAllCardsByRarityAndAffiliationParams) ([]GetAllCardsByRarityAndAffiliationRow, error) {
 	rows, err := q.db.QueryContext(ctx, getAllCardsByRarityAndAffiliation, arg.Rarity, arg.Affiliation)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Card{}
+	items := []GetAllCardsByRarityAndAffiliationRow{}
 	for rows.Next() {
-		var i Card
+		var i GetAllCardsByRarityAndAffiliationRow
 		if err := rows.Scan(
 			&i.CardID,
 			&i.CardName,
@@ -409,10 +505,14 @@ func (q *Queries) GetDeckCards(ctx context.Context, deckID int32) ([]GetDeckCard
 
 const getDeckCardsWithDetails = `-- name: GetDeckCardsWithDetails :many
 SELECT dc.position, c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
-       COALESCE(cs.power, 0) AS attack, COALESCE(cs.hp, 0) AS hp
+       COALESCE(pc.level, 1) AS card_level,
+       CAST(CEIL((1 + 0.2 * (COALESCE(pc.level, 1) - 1)) * COALESCE(cs.power, 0)) AS SIGNED) AS attack,
+       CAST(CEIL((1 + 0.2 * (COALESCE(pc.level, 1) - 1)) * COALESCE(cs.hp, 0)) AS SIGNED) AS hp
 FROM deck_cards dc
+JOIN decks d ON d.deck_id = dc.deck_id
 JOIN cards c ON dc.card_id = c.card_id
 LEFT JOIN card_stats cs ON cs.card_id = c.card_id AND cs.level = 1
+LEFT JOIN player_cards pc ON pc.player_id = d.player_id AND pc.card_id = c.card_id
 WHERE dc.deck_id = ?
 ORDER BY dc.position
 `
@@ -424,10 +524,14 @@ type GetDeckCardsWithDetailsRow struct {
 	Affiliation int32  `json:"affiliation"`
 	Rarity      string `json:"rarity"`
 	ManaCost    int32  `json:"mana_cost"`
-	Attack      int32  `json:"attack"`
-	Hp          int32  `json:"hp"`
+	CardLevel   int32  `json:"card_level"`
+	Attack      int64  `json:"attack"`
+	Hp          int64  `json:"hp"`
 }
 
+// Returns deck cards with stats scaled by the owning player's card level.
+// Formula: ceil((1 + 0.2 * (level - 1)) * base_stat). base_stat comes from
+// card_stats at level=1 (seeded row). Player-card level lives in player_cards.
 func (q *Queries) GetDeckCardsWithDetails(ctx context.Context, deckID int32) ([]GetDeckCardsWithDetailsRow, error) {
 	rows, err := q.db.QueryContext(ctx, getDeckCardsWithDetails, deckID)
 	if err != nil {
@@ -444,9 +548,56 @@ func (q *Queries) GetDeckCardsWithDetails(ctx context.Context, deckID int32) ([]
 			&i.Affiliation,
 			&i.Rarity,
 			&i.ManaCost,
+			&i.CardLevel,
 			&i.Attack,
 			&i.Hp,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDeckUsageForPlayerCard = `-- name: GetDeckUsageForPlayerCard :many
+SELECT d.deck_id, d.name, COUNT(dc.deck_card_id) AS copies_in_deck
+FROM decks d
+LEFT JOIN deck_cards dc ON dc.deck_id = d.deck_id AND dc.card_id = ?
+WHERE d.player_id = ?
+GROUP BY d.deck_id, d.name
+HAVING copies_in_deck > 0
+`
+
+type GetDeckUsageForPlayerCardParams struct {
+	CardID   int32 `json:"card_id"`
+	PlayerID int64 `json:"player_id"`
+}
+
+type GetDeckUsageForPlayerCardRow struct {
+	DeckID       int32  `json:"deck_id"`
+	Name         string `json:"name"`
+	CopiesInDeck int64  `json:"copies_in_deck"`
+}
+
+// For each deck the player owns, how many copies of `card_id` it holds.
+// Used after level-up / disenchant to prune decks whose usage now exceeds
+// the player's remaining quantity.
+func (q *Queries) GetDeckUsageForPlayerCard(ctx context.Context, arg GetDeckUsageForPlayerCardParams) ([]GetDeckUsageForPlayerCardRow, error) {
+	rows, err := q.db.QueryContext(ctx, getDeckUsageForPlayerCard, arg.CardID, arg.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetDeckUsageForPlayerCardRow{}
+	for rows.Next() {
+		var i GetDeckUsageForPlayerCardRow
+		if err := rows.Scan(&i.DeckID, &i.Name, &i.CopiesInDeck); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -478,6 +629,41 @@ func (q *Queries) GetPackByIDAndPlayer(ctx context.Context, arg GetPackByIDAndPl
 	row := q.db.QueryRowContext(ctx, getPackByIDAndPlayer, arg.PackID, arg.PlayerID)
 	var i GetPackByIDAndPlayerRow
 	err := row.Scan(&i.PackType, &i.IsOpened)
+	return i, err
+}
+
+const getPlayerCard = `-- name: GetPlayerCard :one
+SELECT pc.player_id, pc.card_id, pc.level, pc.quantity, c.max_level, c.rarity
+FROM player_cards pc
+JOIN cards c ON c.card_id = pc.card_id
+WHERE pc.player_id = ? AND pc.card_id = ?
+`
+
+type GetPlayerCardParams struct {
+	PlayerID int64 `json:"player_id"`
+	CardID   int32 `json:"card_id"`
+}
+
+type GetPlayerCardRow struct {
+	PlayerID int64  `json:"player_id"`
+	CardID   int32  `json:"card_id"`
+	Level    int32  `json:"level"`
+	Quantity int32  `json:"quantity"`
+	MaxLevel int32  `json:"max_level"`
+	Rarity   string `json:"rarity"`
+}
+
+func (q *Queries) GetPlayerCard(ctx context.Context, arg GetPlayerCardParams) (GetPlayerCardRow, error) {
+	row := q.db.QueryRowContext(ctx, getPlayerCard, arg.PlayerID, arg.CardID)
+	var i GetPlayerCardRow
+	err := row.Scan(
+		&i.PlayerID,
+		&i.CardID,
+		&i.Level,
+		&i.Quantity,
+		&i.MaxLevel,
+		&i.Rarity,
+	)
 	return i, err
 }
 
@@ -515,9 +701,12 @@ func (q *Queries) GetPlayerCardOwnership(ctx context.Context, playerID int64) ([
 
 const getPlayerCards = `-- name: GetPlayerCards :many
 SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
-       c.description, c.icon_url, pc.level, pc.quantity
+       c.description, c.icon_url, c.max_level, pc.level, pc.quantity,
+       COALESCE(cs.power, 0) AS base_attack,
+       COALESCE(cs.hp, 0) AS base_hp
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
+LEFT JOIN card_stats cs ON cs.card_id = c.card_id AND cs.level = 1
 WHERE pc.player_id = ?
 ORDER BY c.rarity DESC, c.card_id ASC
 `
@@ -530,10 +719,16 @@ type GetPlayerCardsRow struct {
 	ManaCost    int32  `json:"mana_cost"`
 	Description string `json:"description"`
 	IconUrl     string `json:"icon_url"`
+	MaxLevel    int32  `json:"max_level"`
 	Level       int32  `json:"level"`
 	Quantity    int32  `json:"quantity"`
+	BaseAttack  int32  `json:"base_attack"`
+	BaseHp      int32  `json:"base_hp"`
 }
 
+// Returns the player's collection with per-card level and max_level. Base
+// stats come from card_stats at level=1; the gameplay service re-scales by
+// level when cards are actually placed, so exposing level here is enough.
 func (q *Queries) GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlayerCardsRow, error) {
 	rows, err := q.db.QueryContext(ctx, getPlayerCards, playerID)
 	if err != nil {
@@ -551,8 +746,11 @@ func (q *Queries) GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlay
 			&i.ManaCost,
 			&i.Description,
 			&i.IconUrl,
+			&i.MaxLevel,
 			&i.Level,
 			&i.Quantity,
+			&i.BaseAttack,
+			&i.BaseHp,
 		); err != nil {
 			return nil, err
 		}
@@ -569,10 +767,13 @@ func (q *Queries) GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlay
 
 const getPlayerCardsNotInDeck = `-- name: GetPlayerCardsNotInDeck :many
 SELECT c.card_id, c.card_name, c.affiliation, c.rarity, c.mana_cost,
-       c.description, c.icon_url, pc.level,
-       pc.quantity - COALESCE(in_deck.cnt, 0) AS quantity
+       c.description, c.icon_url, c.max_level, pc.level,
+       pc.quantity - COALESCE(in_deck.cnt, 0) AS quantity,
+       COALESCE(cs.power, 0) AS base_attack,
+       COALESCE(cs.hp, 0) AS base_hp
 FROM player_cards pc
 JOIN cards c ON pc.card_id = c.card_id
+LEFT JOIN card_stats cs ON cs.card_id = c.card_id AND cs.level = 1
 LEFT JOIN (
     SELECT card_id, COUNT(*) AS cnt
     FROM deck_cards
@@ -597,8 +798,11 @@ type GetPlayerCardsNotInDeckRow struct {
 	ManaCost    int32  `json:"mana_cost"`
 	Description string `json:"description"`
 	IconUrl     string `json:"icon_url"`
+	MaxLevel    int32  `json:"max_level"`
 	Level       int32  `json:"level"`
 	Quantity    int32  `json:"quantity"`
+	BaseAttack  int32  `json:"base_attack"`
+	BaseHp      int32  `json:"base_hp"`
 }
 
 func (q *Queries) GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCardsNotInDeckParams) ([]GetPlayerCardsNotInDeckRow, error) {
@@ -618,8 +822,11 @@ func (q *Queries) GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCard
 			&i.ManaCost,
 			&i.Description,
 			&i.IconUrl,
+			&i.MaxLevel,
 			&i.Level,
 			&i.Quantity,
+			&i.BaseAttack,
+			&i.BaseHp,
 		); err != nil {
 			return nil, err
 		}
@@ -632,6 +839,17 @@ func (q *Queries) GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCard
 		return nil, err
 	}
 	return items, nil
+}
+
+const getPlayerCrystals = `-- name: GetPlayerCrystals :one
+SELECT crystals FROM users WHERE id = ?
+`
+
+func (q *Queries) GetPlayerCrystals(ctx context.Context, id int64) (int32, error) {
+	row := q.db.QueryRowContext(ctx, getPlayerCrystals, id)
+	var crystals int32
+	err := row.Scan(&crystals)
+	return crystals, err
 }
 
 const getPlayerDeckList = `-- name: GetPlayerDeckList :many
@@ -760,6 +978,33 @@ func (q *Queries) InsertDeckCard(ctx context.Context, arg InsertDeckCardParams) 
 	return err
 }
 
+const levelUpPlayerCard = `-- name: LevelUpPlayerCard :execresult
+UPDATE player_cards
+SET level = level + 1,
+    quantity = quantity - ?
+WHERE player_id = ? AND card_id = ? AND level = ? AND quantity >= ?
+`
+
+type LevelUpPlayerCardParams struct {
+	Quantity   int32 `json:"quantity"`
+	PlayerID   int64 `json:"player_id"`
+	CardID     int32 `json:"card_id"`
+	Level      int32 `json:"level"`
+	Quantity_2 int32 `json:"quantity_2"`
+}
+
+// Increments player_card level and consumes `cards_cost` quantity.
+// Uses LEAST to avoid going below zero — caller must pre-check ownership.
+func (q *Queries) LevelUpPlayerCard(ctx context.Context, arg LevelUpPlayerCardParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, levelUpPlayerCard,
+		arg.Quantity,
+		arg.PlayerID,
+		arg.CardID,
+		arg.Level,
+		arg.Quantity_2,
+	)
+}
+
 const openPack = `-- name: OpenPack :exec
 UPDATE card_packs SET is_opened = TRUE, opened_at = NOW() WHERE pack_id = ?
 `
@@ -767,6 +1012,27 @@ UPDATE card_packs SET is_opened = TRUE, opened_at = NOW() WHERE pack_id = ?
 func (q *Queries) OpenPack(ctx context.Context, packID int32) error {
 	_, err := q.db.ExecContext(ctx, openPack, packID)
 	return err
+}
+
+const pruneDeckCardsForCard = `-- name: PruneDeckCardsForCard :execresult
+DELETE FROM deck_cards
+WHERE deck_id = ? AND card_id = ?
+ORDER BY position DESC
+LIMIT ?
+`
+
+type PruneDeckCardsForCardParams struct {
+	DeckID int32 `json:"deck_id"`
+	CardID int32 `json:"card_id"`
+	Limit  int32 `json:"limit"`
+}
+
+// Removes the `excess` highest-positioned copies of `card_id` from a single
+// deck. Called when the player's remaining quantity can no longer support
+// the deck's current usage. Highest positions go first so the deck's lead
+// slot (position 0) is preserved where possible.
+func (q *Queries) PruneDeckCardsForCard(ctx context.Context, arg PruneDeckCardsForCardParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, pruneDeckCardsForCard, arg.DeckID, arg.CardID, arg.Limit)
 }
 
 const setActiveDeck = `-- name: SetActiveDeck :exec

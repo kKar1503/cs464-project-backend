@@ -79,6 +79,7 @@ type Card struct {
 	ManaCost    int32  `json:"mana_cost"`
 	Description string `json:"description"`
 	IconUrl     string `json:"icon_url"`
+	MaxLevel    int32  `json:"max_level"`
 }
 
 type CardAbility struct {
@@ -165,6 +166,7 @@ type User struct {
 	BanReason    *string    `json:"ban_reason"`
 	Mmr          int32      `json:"mmr"`
 	ActiveDeckID *int32     `json:"active_deck_id"`
+	Crystals     int32      `json:"crystals"`
 }
 
 type UserSession struct {

@@ -10,6 +10,7 @@ import (
 )
 
 type Querier interface {
+	AddPlayerCrystals(ctx context.Context, arg AddPlayerCrystalsParams) error
 	BanUser(ctx context.Context, arg BanUserParams) error
 	CancelGameSession(ctx context.Context, sessionID string) error
 	CompleteGameSession(ctx context.Context, arg CompleteGameSessionParams) error
@@ -20,31 +21,48 @@ type Querier interface {
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (sql.Result, error)
 	CreateUserAuth(ctx context.Context, arg CreateUserAuthParams) (sql.Result, error)
+	DeductPlayerCrystals(ctx context.Context, arg DeductPlayerCrystalsParams) (sql.Result, error)
 	DeleteDeck(ctx context.Context, arg DeleteDeckParams) (sql.Result, error)
 	DeleteDeckCards(ctx context.Context, deckID int32) error
 	DeleteFromQueue(ctx context.Context, userID int64) (sql.Result, error)
 	DeleteFromQueueByUsers(ctx context.Context, arg DeleteFromQueueByUsersParams) error
 	DeleteUser(ctx context.Context, id int64) error
+	// Removes `quantity_to_remove` copies from a maxed-out player card.
+	// Caller must pass `min_quantity = quantity_to_remove + 1` so the player
+	// retains at least one copy. Gated on level = max_level (atomic).
+	DisenchantPlayerCard(ctx context.Context, arg DisenchantPlayerCardParams) (sql.Result, error)
 	GetAbilitiesForDeck(ctx context.Context, deckID int32) ([]GetAbilitiesForDeckRow, error)
 	GetActiveDeck(ctx context.Context, id int64) (*int32, error)
 	GetActiveQueue(ctx context.Context) ([]GetActiveQueueRow, error)
 	GetActiveTokensByUser(ctx context.Context, userID int64) ([]string, error)
 	GetAllCardAbilities(ctx context.Context) ([]GetAllCardAbilitiesRow, error)
 	GetAllCardDefinitions(ctx context.Context) ([]GetAllCardDefinitionsRow, error)
-	GetAllCards(ctx context.Context) ([]Card, error)
-	GetAllCardsByAffiliation(ctx context.Context, affiliation int32) ([]Card, error)
-	GetAllCardsByRarity(ctx context.Context, rarity string) ([]Card, error)
-	GetAllCardsByRarityAndAffiliation(ctx context.Context, arg GetAllCardsByRarityAndAffiliationParams) ([]Card, error)
+	GetAllCards(ctx context.Context) ([]GetAllCardsRow, error)
+	GetAllCardsByAffiliation(ctx context.Context, affiliation int32) ([]GetAllCardsByAffiliationRow, error)
+	GetAllCardsByRarity(ctx context.Context, rarity string) ([]GetAllCardsByRarityRow, error)
+	GetAllCardsByRarityAndAffiliation(ctx context.Context, arg GetAllCardsByRarityAndAffiliationParams) ([]GetAllCardsByRarityAndAffiliationRow, error)
 	GetDeckByIDAndPlayer(ctx context.Context, arg GetDeckByIDAndPlayerParams) (GetDeckByIDAndPlayerRow, error)
 	GetDeckCards(ctx context.Context, deckID int32) ([]GetDeckCardsRow, error)
+	// Returns deck cards with stats scaled by the owning player's card level.
+	// Formula: ceil((1 + 0.2 * (level - 1)) * base_stat). base_stat comes from
+	// card_stats at level=1 (seeded row). Player-card level lives in player_cards.
 	GetDeckCardsWithDetails(ctx context.Context, deckID int32) ([]GetDeckCardsWithDetailsRow, error)
+	// For each deck the player owns, how many copies of `card_id` it holds.
+	// Used after level-up / disenchant to prune decks whose usage now exceeds
+	// the player's remaining quantity.
+	GetDeckUsageForPlayerCard(ctx context.Context, arg GetDeckUsageForPlayerCardParams) ([]GetDeckUsageForPlayerCardRow, error)
 	GetExpiredWaitingSessions(ctx context.Context) ([]GetExpiredWaitingSessionsRow, error)
 	GetGameSessionPlayers(ctx context.Context, sessionID string) (GetGameSessionPlayersRow, error)
 	GetOngoingGameSession(ctx context.Context, arg GetOngoingGameSessionParams) (string, error)
 	GetPackByIDAndPlayer(ctx context.Context, arg GetPackByIDAndPlayerParams) (GetPackByIDAndPlayerRow, error)
+	GetPlayerCard(ctx context.Context, arg GetPlayerCardParams) (GetPlayerCardRow, error)
 	GetPlayerCardOwnership(ctx context.Context, playerID int64) ([]GetPlayerCardOwnershipRow, error)
+	// Returns the player's collection with per-card level and max_level. Base
+	// stats come from card_stats at level=1; the gameplay service re-scales by
+	// level when cards are actually placed, so exposing level here is enough.
 	GetPlayerCards(ctx context.Context, playerID int64) ([]GetPlayerCardsRow, error)
 	GetPlayerCardsNotInDeck(ctx context.Context, arg GetPlayerCardsNotInDeckParams) ([]GetPlayerCardsNotInDeckRow, error)
+	GetPlayerCrystals(ctx context.Context, id int64) (int32, error)
 	GetPlayerDeckList(ctx context.Context, playerID int64) ([]GetPlayerDeckListRow, error)
 	GetPlayerMMR(ctx context.Context, id int64) (int32, error)
 	GetPlayerPacks(ctx context.Context, playerID int64) ([]GetPlayerPacksRow, error)
@@ -61,8 +79,16 @@ type Querier interface {
 	GetUserForMatchmaking(ctx context.Context, id int64) (GetUserForMatchmakingRow, error)
 	InsertDeckCard(ctx context.Context, arg InsertDeckCardParams) error
 	InsertIntoQueue(ctx context.Context, arg InsertIntoQueueParams) error
+	// Increments player_card level and consumes `cards_cost` quantity.
+	// Uses LEAST to avoid going below zero — caller must pre-check ownership.
+	LevelUpPlayerCard(ctx context.Context, arg LevelUpPlayerCardParams) (sql.Result, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
 	OpenPack(ctx context.Context, packID int32) error
+	// Removes the `excess` highest-positioned copies of `card_id` from a single
+	// deck. Called when the player's remaining quantity can no longer support
+	// the deck's current usage. Highest positions go first so the deck's lead
+	// slot (position 0) is preserved where possible.
+	PruneDeckCardsForCard(ctx context.Context, arg PruneDeckCardsForCardParams) (sql.Result, error)
 	RequeuePlayer(ctx context.Context, arg RequeuePlayerParams) error
 	RevokeAllUserSessions(ctx context.Context, userID int64) error
 	RevokeSessionByToken(ctx context.Context, token string) error
