@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,6 +60,48 @@ type QueueEntry struct {
 	JoinedAt time.Time
 }
 
+// deckValidationClient is a short-timeout HTTP client for calling the deck
+// service's /internal/validate-active-deck endpoint. Joining the queue is a
+// synchronous user action so we don't want to hang on a slow deck service.
+var deckValidationClient = &http.Client{Timeout: 3 * time.Second}
+
+// checkActiveDeckValid asks the deck service whether the user's active deck
+// is legal to queue with. Returns:
+//   - (true, "", nil)   — deck is valid
+//   - (false, reason, nil) — deck exists but fails a rule (no active deck,
+//     wrong size, missing cards after level-up prune, etc.)
+//   - (false, "", err)  — deck service is unreachable or errored out
+func checkActiveDeckValid(ctx context.Context, userID int64) (bool, string, error) {
+	deckServiceURL := os.Getenv("DECK_SERVICE_URL")
+	if deckServiceURL == "" {
+		deckServiceURL = "http://deck-service:8005"
+	}
+	url := fmt.Sprintf("%s/internal/validate-active-deck?user_id=%d", deckServiceURL, userID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false, "", err
+	}
+	resp, err := deckValidationClient.Do(req)
+	if err != nil {
+		return false, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, "", fmt.Errorf("deck service returned %d", resp.StatusCode)
+	}
+
+	var body struct {
+		Valid  bool   `json:"valid"`
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return false, "", err
+	}
+	return body.Valid, body.Reason, nil
+}
+
 // handleJoinQueue adds a player to the matchmaking queue
 func handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 
@@ -104,6 +147,21 @@ func handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 	_, err = queries.GetQueueEntryByUserID(ctx, userID)
 	if err == nil {
 		respondError(w, "Already in queue", http.StatusConflict)
+		return
+	}
+
+	// Make sure the user has a legal active deck. Leveling up or disenchanting
+	// cards can silently shrink decks below the required size (pruneDecks
+	// removes slots the player no longer has enough copies for), so we can't
+	// trust a deck that was valid when first saved.
+	valid, reason, err := checkActiveDeckValid(ctx, userID)
+	if err != nil {
+		log.Printf("Deck validation failed for user %d: %v", userID, err)
+		respondError(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !valid {
+		respondError(w, fmt.Sprintf("Cannot queue: %s", reason), http.StatusBadRequest)
 		return
 	}
 
