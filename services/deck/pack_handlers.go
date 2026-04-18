@@ -18,11 +18,11 @@ type PackResponse struct {
 }
 
 type OpenPackResponse struct {
-	PackID          int64      `json:"pack_id"`
-	PackType        string     `json:"pack_type"`
-	Cards           []PackCard `json:"cards"`
-	CrystalsAwarded int32      `json:"crystals_awarded"`
-	CrystalsTotal   int32      `json:"crystals_total"`
+	PackID          int64          `json:"pack_id"`
+	PackType        string         `json:"pack_type"`
+	Cards           []PackCardItem `json:"cards"`
+	CrystalsAwarded int32          `json:"crystals_awarded"`
+	CrystalsTotal   int32          `json:"crystals_total"`
 }
 
 // crystalsPerPack maps pack type → crystals awarded on open.
@@ -33,10 +33,50 @@ var crystalsPerPack = map[string]int32{
 	"legendary": 5000,
 }
 
+// PackCard is the raw card entry from generatePackCards (may contain repeats).
 type PackCard struct {
 	CardID   int64  `json:"card_id"`
 	CardName string `json:"card_name"`
 	Rarity   string `json:"rarity"`
+}
+
+// PackCardItem is the client-facing version returned in the open-pack
+// response. Duplicates are collapsed into a single entry with a quantity.
+type PackCardItem struct {
+	CardID   int64  `json:"card_id"`
+	CardName string `json:"card_name"`
+	Rarity   string `json:"rarity"`
+	Quantity int    `json:"quantity"`
+}
+
+// collapsePackCards groups duplicate PackCard entries by card_id, preserving
+// order of first appearance.
+func collapsePackCards(cards []PackCard) []PackCardItem {
+	type entry struct {
+		idx  int
+		item PackCardItem
+	}
+	seen := make(map[int64]*entry, len(cards))
+	var ordered []*entry
+	for _, c := range cards {
+		if e, ok := seen[c.CardID]; ok {
+			e.item.Quantity++
+		} else {
+			e = &entry{idx: len(ordered), item: PackCardItem{
+				CardID:   c.CardID,
+				CardName: c.CardName,
+				Rarity:   c.Rarity,
+				Quantity: 1,
+			}}
+			seen[c.CardID] = e
+			ordered = append(ordered, e)
+		}
+	}
+	result := make([]PackCardItem, len(ordered))
+	for _, e := range ordered {
+		result[e.idx] = e.item
+	}
+	return result
 }
 
 func handleGetPacks(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +188,7 @@ func handleOpenPack(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, OpenPackResponse{
 		PackID:          packID,
 		PackType:        pack.PackType,
-		Cards:           cards,
+		Cards:           collapsePackCards(cards),
 		CrystalsAwarded: crystals,
 		CrystalsTotal:   total,
 	})
