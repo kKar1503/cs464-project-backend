@@ -67,8 +67,15 @@ type UpdateDeckRequest struct {
     CardIDs  []int64 `json:"card_ids"`
 }
 type DeckCard struct {
-    CardID   int64 `json:"card_id"`
-    Position int   `json:"position"`
+    CardID      int64  `json:"card_id"`
+    CardName    string `json:"card_name"`
+    Affiliation int    `json:"affiliation"`
+    Rarity      string `json:"rarity"`
+    ManaCost    int    `json:"mana_cost"`
+    Level       int    `json:"level"`
+    Attack      int    `json:"attack"`
+    HP          int    `json:"hp"`
+    Position    int    `json:"position"`
 }
 type DeckResponse struct {
     DeckID    int64      `json:"deck_id"`
@@ -76,6 +83,39 @@ type DeckResponse struct {
     CardIDs   []int64    `json:"card_ids"`
     Cards     []DeckCard `json:"cards"`
     CreatedAt string     `json:"created_at"`
+}
+
+// buildDeckResponse loads full card details for a deck and builds a DeckResponse.
+func buildDeckResponse(ctx context.Context, deckID int32, name string, createdAt time.Time) (DeckResponse, error) {
+    details, err := queries.GetDeckCardsWithDetails(ctx, deckID)
+    if err != nil {
+        return DeckResponse{}, err
+    }
+
+    cards := make([]DeckCard, 0, len(details))
+    cardIDs := make([]int64, 0, len(details))
+    for _, c := range details {
+        cards = append(cards, DeckCard{
+            CardID:      int64(c.CardID),
+            CardName:    c.CardName,
+            Affiliation: int(c.Affiliation),
+            Rarity:      c.Rarity,
+            ManaCost:    int(c.ManaCost),
+            Level:       int(c.CardLevel),
+            Attack:      int(c.Attack),
+            HP:          int(c.Hp),
+            Position:    int(c.Position),
+        })
+        cardIDs = append(cardIDs, int64(c.CardID))
+    }
+
+    return DeckResponse{
+        DeckID:    int64(deckID),
+        Name:      name,
+        CardIDs:   cardIDs,
+        Cards:     cards,
+        CreatedAt: createdAt.Format(time.RFC3339),
+    }, nil
 }
 
 func respondJSON(w http.ResponseWriter, statusCode int, data interface{}) {
@@ -246,31 +286,13 @@ func handleGetDeckByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deckCards, err := queries.GetDeckCards(ctx, int32(deckID))
+	resp, err := buildDeckResponse(ctx, deck.DeckID, deck.Name, deck.CreatedAt)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
 
-	var cards []DeckCard
-	var cardIDs []int64
-	for _, c := range deckCards {
-		cards = append(cards, DeckCard{CardID: int64(c.CardID), Position: int(c.Position)})
-		cardIDs = append(cardIDs, int64(c.CardID))
-	}
-
-	if cards == nil {
-		cards = []DeckCard{}
-		cardIDs = []int64{}
-	}
-
-	respondJSON(w, http.StatusOK, DeckResponse{
-		DeckID:    int64(deck.DeckID),
-		Name:      deck.Name,
-		CardIDs:   cardIDs,
-		Cards:     cards,
-		CreatedAt: deck.CreatedAt.Format(time.RFC3339),
-	})
+	respondJSON(w, http.StatusOK, resp)
 }
 
 func handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
@@ -494,26 +516,12 @@ func handleGetAllDecks(w http.ResponseWriter, r *http.Request) {
 
 	decks := make([]DeckResponse, 0, len(deckList))
 	for _, d := range deckList {
-		deckCards, err := queries.GetDeckCards(ctx, d.DeckID)
+		resp, err := buildDeckResponse(ctx, d.DeckID, d.Name, d.CreatedAt)
 		if err != nil {
 			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get deck cards"})
 			return
 		}
-
-		cards := make([]DeckCard, 0, len(deckCards))
-		cardIDs := make([]int64, 0, len(deckCards))
-		for _, c := range deckCards {
-			cards = append(cards, DeckCard{CardID: int64(c.CardID), Position: int(c.Position)})
-			cardIDs = append(cardIDs, int64(c.CardID))
-		}
-
-		decks = append(decks, DeckResponse{
-			DeckID:    int64(d.DeckID),
-			Name:      d.Name,
-			CardIDs:   cardIDs,
-			Cards:     cards,
-			CreatedAt: d.CreatedAt.Format(time.RFC3339),
-		})
+		decks = append(decks, resp)
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{"decks": decks, "count": len(decks)})
@@ -805,7 +813,9 @@ func handleGetActiveDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	activeDeckID, err := queries.GetActiveDeck(r.Context(), userID)
+	ctx := r.Context()
+
+	activeDeckID, err := queries.GetActiveDeck(ctx, userID)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
@@ -816,7 +826,25 @@ func handleGetActiveDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{"active_deck_id": *activeDeckID})
+	deck, err := queries.GetDeckByIDAndPlayer(ctx, db.GetDeckByIDAndPlayerParams{
+		DeckID:   *activeDeckID,
+		PlayerID: userID,
+	})
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load active deck"})
+		return
+	}
+
+	resp, err := buildDeckResponse(ctx, deck.DeckID, deck.Name, deck.CreatedAt)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load deck cards"})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"active_deck_id": *activeDeckID,
+		"deck":           resp,
+	})
 }
 
 // Internal endpoint — called by auth service after user registration
