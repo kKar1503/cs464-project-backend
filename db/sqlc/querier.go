@@ -14,6 +14,7 @@ type Querier interface {
 	BanUser(ctx context.Context, arg BanUserParams) error
 	CancelGameSession(ctx context.Context, sessionID string) error
 	CompleteGameSession(ctx context.Context, arg CompleteGameSessionParams) error
+	CountUnopenedPacks(ctx context.Context, playerID int64) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateDeck(ctx context.Context, arg CreateDeckParams) (sql.Result, error)
 	CreateGameSession(ctx context.Context, arg CreateGameSessionParams) error

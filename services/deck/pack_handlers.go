@@ -310,6 +310,8 @@ func GivePackToPlayer(ctx context.Context, playerID int64) (int64, string, error
 	return packID, packType, nil
 }
 
+const maxUnopenedPacks = 4
+
 func handleBuyPack(w http.ResponseWriter, r *http.Request) {
 	userID, err := getUserFromToken(r)
 	if err != nil {
@@ -318,6 +320,18 @@ func handleBuyPack(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	count, err := queries.CountUnopenedPacks(r.Context(), userID)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	if count >= maxUnopenedPacks {
+		respondJSON(w, http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("cannot have more than %d unopened packs", maxUnopenedPacks),
+		})
 		return
 	}
 

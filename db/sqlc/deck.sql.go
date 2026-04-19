@@ -26,6 +26,17 @@ func (q *Queries) AddPlayerCrystals(ctx context.Context, arg AddPlayerCrystalsPa
 	return err
 }
 
+const countUnopenedPacks = `-- name: CountUnopenedPacks :one
+SELECT COUNT(*) FROM card_packs WHERE player_id = ? AND is_opened = FALSE
+`
+
+func (q *Queries) CountUnopenedPacks(ctx context.Context, playerID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUnopenedPacks, playerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createDeck = `-- name: CreateDeck :execresult
 INSERT INTO decks (player_id, name) VALUES (?, ?)
 `

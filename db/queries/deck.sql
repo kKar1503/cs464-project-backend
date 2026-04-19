@@ -92,6 +92,9 @@ ON DUPLICATE KEY UPDATE quantity = VALUES(quantity);
 -- name: GetRandomCardsByRarity :many
 SELECT card_id, card_name, rarity FROM cards WHERE rarity = ? ORDER BY RAND() LIMIT ?;
 
+-- name: CountUnopenedPacks :one
+SELECT COUNT(*) FROM card_packs WHERE player_id = ? AND is_opened = FALSE;
+
 -- name: CreatePack :execresult
 INSERT INTO card_packs (player_id, pack_type) VALUES (?, ?);
 
