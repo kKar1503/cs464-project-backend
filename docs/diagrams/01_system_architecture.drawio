@@ -1,0 +1,223 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.6 Chrome/144.0.7559.236 Electron/40.8.4 Safari/537.36" version="29.6.6">
+  <diagram id="mxxNCmbbsg4DCYWD0Hwe" name="Page-1">
+    <mxGraphModel dx="1357" dy="997" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="docker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;dashed=1;dashPattern=8 4;strokeColor=#666666;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5;arcSize=6;" value="game-network (Docker Compose)" vertex="1">
+          <mxGeometry height="780" width="1280" x="160" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="client" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6D0DE;strokeColor=#AE4132;fontSize=13;fontStyle=1;arcSize=20;" value="Frontend Client&#xa;(Browser / Mobile)" vertex="1">
+          <mxGeometry height="60" width="200" x="600" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;fontStyle=0;arcSize=10;" value="Auth Service&#xa;Port 8000&#xa;login, register, sessions, bans" vertex="1">
+          <mxGeometry height="70" width="220" x="200" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="matchmaking" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;fontStyle=0;arcSize=10;" value="Matchmaking Service&#xa;Port 8001&#xa;queue, MMR matching" vertex="1">
+          <mxGeometry height="70" width="220" x="480" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="gameplay" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;fontStyle=0;arcSize=10;" value="Gameplay Service&#xa;Port 8002&#xa;WebSocket game engine" vertex="1">
+          <mxGeometry height="70" width="220" x="760" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="deck" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;fontStyle=0;arcSize=10;" value="Deck Service&#xa;Port 8005&#xa;cards, decks, packs, leveling" vertex="1">
+          <mxGeometry height="70" width="220" x="1040" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="friendlist" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=11;fontStyle=0;arcSize=10;fontColor=#999999;" value="Friendlist Service&#xa;Port 8003 (stub)" vertex="1">
+          <mxGeometry height="50" width="180" x="200" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="replay" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=11;fontStyle=0;arcSize=10;fontColor=#999999;" value="Replay Service&#xa;Port 8004 (stub)" vertex="1">
+          <mxGeometry height="50" width="180" x="420" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="cursor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=11;fontStyle=0;arcSize=10;fontColor=#999999;" value="Cursor UDP&#xa;Port 9001/UDP (stub)" vertex="1">
+          <mxGeometry height="50" width="180" x="640" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="interLabel" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=12;fontStyle=3;fontColor=#999999;" value="Inter-Service Communication" vertex="1">
+          <mxGeometry height="30" width="190" x="530" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mm_auth" edge="1" parent="1" source="matchmaking" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#B85450;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="auth">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="460" y="315" />
+              <mxPoint x="460" y="315" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_mm_auth_label" connectable="0" parent="e_mm_auth" style="edgeLabel;html=1;align=center;verticalAlign=bottom;resizable=0;points=[];fontSize=9;" value="validate token" vertex="1">
+          <mxGeometry relative="1" x="-0.1" as="geometry">
+            <mxPoint y="-5" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_mm_deck" edge="1" parent="1" source="matchmaking" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#B85450;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" target="deck">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="720" y="315" />
+              <mxPoint x="720" y="380" />
+              <mxPoint x="1095" y="380" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_mm_deck_label" connectable="0" parent="e_mm_deck" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;" value="validate active deck" vertex="1">
+          <mxGeometry relative="1" x="0.1" as="geometry">
+            <mxPoint y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gp_auth" edge="1" parent="1" source="gameplay" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#D6B656;fontSize=10;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="auth">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="760" y="540" />
+              <mxPoint x="310" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gp_auth_label" connectable="0" parent="e_gp_auth" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;" value="validate WS token" vertex="1">
+          <mxGeometry relative="1" x="0.2" as="geometry">
+            <mxPoint y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gp_deck" edge="1" parent="1" source="gameplay" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#D6B656;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="deck">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_gp_deck_label" connectable="0" parent="e_gp_deck" style="edgeLabel;html=1;align=center;verticalAlign=bottom;resizable=0;points=[];fontSize=9;" value="load cards + deck" vertex="1">
+          <mxGeometry relative="1" x="-0.1" as="geometry">
+            <mxPoint y="-5" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gp_mm" edge="1" parent="1" source="gameplay" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#D6B656;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=1;entryDx=0;entryDy=0;" target="matchmaking">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="740" y="315" />
+              <mxPoint x="740" y="350" />
+              <mxPoint x="700" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gp_mm_label" connectable="0" parent="e_gp_mm" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;" value="end game session" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="10" y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_c_auth" edge="1" parent="1" source="client" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6C8EBF;strokeWidth=2;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c_auth_label" connectable="0" parent="e_c_auth" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontStyle=1;" value="HTTP" vertex="1">
+          <mxGeometry relative="1" x="-0.2" as="geometry">
+            <mxPoint x="-20" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_c_mm" edge="1" parent="1" source="client" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6C8EBF;strokeWidth=2;exitX=0.4;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="matchmaking">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c_mm_label" connectable="0" parent="e_c_mm" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontStyle=1;" value="HTTP" vertex="1">
+          <mxGeometry relative="1" x="-0.2" as="geometry">
+            <mxPoint x="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_c_gp" edge="1" parent="1" source="client" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#82B366;strokeWidth=2;exitX=0.6;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="gameplay">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c_gp_label" connectable="0" parent="e_c_gp" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontStyle=1;fontColor=#82B366;" value="WebSocket" vertex="1">
+          <mxGeometry relative="1" x="-0.2" as="geometry">
+            <mxPoint x="15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_c_deck" edge="1" parent="1" source="client" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6C8EBF;strokeWidth=2;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="deck">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c_deck_label" connectable="0" parent="e_c_deck" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontStyle=1;" value="HTTP" vertex="1">
+          <mxGeometry relative="1" x="-0.2" as="geometry">
+            <mxPoint x="20" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="mysql" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=11;arcSize=10;" value="MySQL 8.0&#xa;Persistent Storage&#xa;(users, cards, decks, sessions)" vertex="1">
+          <mxGeometry height="80" width="240" x="340" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="redis" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;arcSize=10;" value="Redis 7&#xa;Cache + Ephemeral Store&#xa;(sessions, queue, match notifications)" vertex="1">
+          <mxGeometry height="80" width="260" x="820" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="e_auth_mysql" edge="1" parent="1" source="auth" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#D6B656;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=7.5;" target="mysql">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="600" />
+              <mxPoint x="388" y="600" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_mm_mysql" edge="1" parent="1" source="matchmaking" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#D6B656;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=7.5;" target="mysql">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="590" y="590" />
+              <mxPoint x="460" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gp_mysql" edge="1" parent="1" source="gameplay" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#D6B656;dashed=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=7.5;" target="mysql">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="815" y="580" />
+              <mxPoint x="532" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_deck_mysql" edge="1" parent="1" source="deck" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#D6B656;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="mysql">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1150" y="600" />
+              <mxPoint x="600" y="600" />
+              <mxPoint x="600" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_auth_redis" edge="1" parent="1" source="auth" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#B85450;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="redis">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="610" />
+              <mxPoint x="230" y="610" />
+              <mxPoint x="230" y="900" />
+              <mxPoint x="800" y="900" />
+              <mxPoint x="800" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_mm_redis" edge="1" parent="1" source="matchmaking" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#B85450;dashed=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=7.5;" target="redis">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="645" y="570" />
+              <mxPoint x="898" y="570" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_gp_redis" edge="1" parent="1" source="gameplay" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#B85450;dashed=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=7.5;" target="redis">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="925" y="560" />
+              <mxPoint x="950" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_deck_redis" edge="1" parent="1" source="deck" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#B85450;dashed=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=7.5;" target="redis">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1205" y="560" />
+              <mxPoint x="1028" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#999999;fontSize=11;fontStyle=1;verticalAlign=top;align=left;spacingLeft=5;spacingTop=2;arcSize=10;" value="Legend" vertex="1">
+          <mxGeometry height="120" width="240" x="1160" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#6C8EBF;" value="Blue = HTTP connection" vertex="1">
+          <mxGeometry height="20" width="140" x="1170" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#82B366;" value="Green = WebSocket connection" vertex="1">
+          <mxGeometry height="20" width="170" x="1170" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#999999;" value="Dashed = service to data store" vertex="1">
+          <mxGeometry height="20" width="170" x="1170" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#999999;" value="Grey = stub (not implemented)" vertex="1">
+          <mxGeometry height="20" width="170" x="1170" y="530" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

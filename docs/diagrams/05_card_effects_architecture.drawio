@@ -1,0 +1,371 @@
+<mxGraphModel adaptiveColors="auto" dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1600">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <!-- Title -->
+    <mxCell id="title" value="Card Effects System: Factory + Registry Pattern" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="330" y="20" width="440" height="40" as="geometry"/>
+    </mxCell>
+
+    <!-- LAYER 1: Database -->
+    <mxCell id="l1_label" value="Layer 1: Database Storage" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=13;fontStyle=5;fontColor=#D6B656;" vertex="1" parent="1">
+      <mxGeometry x="40" y="70" width="200" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_table" value="card_abilities" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;resizeLast=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="140" y="100" width="700" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_header" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=#D6B656;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontColor=#FFFFFF;fontStyle=1;top=0;left=0;right=0;bottom=1;" vertex="1" parent="db_table">
+      <mxGeometry y="28" width="700" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_hc1" value="card_id" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=1;overflow=hidden;fontSize=10;fontStyle=1;" vertex="1" parent="db_header">
+      <mxGeometry width="100" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_hc2" value="trigger_type" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=1;overflow=hidden;fontSize=10;fontStyle=1;" vertex="1" parent="db_header">
+      <mxGeometry x="100" width="120" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_hc3" value="effect_type" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=1;overflow=hidden;fontSize=10;fontStyle=1;" vertex="1" parent="db_header">
+      <mxGeometry x="220" width="120" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_hc4" value="params (JSON)" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;overflow=hidden;fontSize=10;fontStyle=1;" vertex="1" parent="db_header">
+      <mxGeometry x="340" width="360" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_row" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;top=0;left=0;right=0;bottom=0;" vertex="1" parent="db_table">
+      <mxGeometry y="52" width="700" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_rc1" value="5" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=1;overflow=hidden;fontSize=10;" vertex="1" parent="db_row">
+      <mxGeometry width="100" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_rc2" value="summon" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=1;overflow=hidden;fontSize=10;fontColor=#6C8EBF;fontStyle=2;" vertex="1" parent="db_row">
+      <mxGeometry x="100" width="120" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_rc3" value="stats_change" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=1;overflow=hidden;fontSize=10;fontColor=#82B366;fontStyle=2;" vertex="1" parent="db_row">
+      <mxGeometry x="220" width="120" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="db_rc4" value="{&quot;target&quot;:&quot;adjacent&quot;, &quot;attack&quot;:2, &quot;hp&quot;:0}" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;overflow=hidden;fontSize=10;fontStyle=2;" vertex="1" parent="db_row">
+      <mxGeometry x="340" width="360" height="28" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow L1 to L2 -->
+    <mxCell id="e_l1_l2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#333333;strokeWidth=2;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="490" y="180" as="sourcePoint"/>
+        <mxPoint x="490" y="220" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- LAYER 2: Loading -->
+    <mxCell id="l2_label" value="Layer 2: Loading (at game start)" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=13;fontStyle=5;fontColor=#6C8EBF;" vertex="1" parent="1">
+      <mxGeometry x="40" y="200" width="240" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="gp_svc" value="Gameplay Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="180" y="230" width="140" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="deck_svc" value="Deck Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="560" y="230" width="140" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_gp_deck" value="GET /internal/card-definitions" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=10;" edge="1" parent="1" source="gp_svc" target="deck_svc">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_deck_gp" value="CardDefinition[] with AbilityDefinition[]" style="endArrow=open;endFill=0;dashed=1;strokeColor=#333333;fontSize=10;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="560" y="265" as="sourcePoint"/>
+        <mxPoint x="320" y="265" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- AbilityDefinition struct -->
+    <mxCell id="abildef" value="AbilityDefinition struct&#xa;{TriggerType string, EffectType string, Params json.RawMessage}" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=10;fontStyle=2;align=center;" vertex="1" parent="1">
+      <mxGeometry x="250" y="285" width="400" height="35" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow L2 to L3 -->
+    <mxCell id="e_l2_l3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#333333;strokeWidth=2;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="490" y="320" as="sourcePoint"/>
+        <mxPoint x="490" y="360" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- LAYER 3: Registry -->
+    <mxCell id="l3_label" value="Layer 3: Registry (effects/registry.go)" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=13;fontStyle=5;fontColor=#82B366;" vertex="1" parent="1">
+      <mxGeometry x="40" y="340" width="300" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="registry" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;container=1;" vertex="1" parent="1">
+      <mxGeometry x="140" y="370" width="700" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_title" value="var registry = map[string]EffectFactory" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=12;fontStyle=1;fontColor=#82B366;" vertex="1" parent="registry">
+      <mxGeometry x="180" y="5" width="280" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r1" value="&quot;stats_change&quot; -&gt; NewStatsChange" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="20" y="30" width="200" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r2" value="&quot;deal_damage&quot; -&gt; NewDealDamage" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="20" y="50" width="200" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r3" value="&quot;destroy&quot; -&gt; NewDestroy" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="20" y="70" width="150" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r4" value="&quot;bounce&quot; -&gt; NewBounce" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="20" y="90" width="140" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r5" value="&quot;transform&quot; -&gt; NewTransform" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="240" y="30" width="170" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r6" value="&quot;summon_units&quot; -&gt; NewSummonUnits" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="240" y="50" width="210" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r7" value="&quot;set_hp&quot; -&gt; NewSetHP" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="240" y="70" width="130" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r8" value="&quot;reflect&quot; -&gt; NewReflect" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="240" y="90" width="140" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r9" value="&quot;shield&quot; -&gt; NewShield" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="470" y="30" width="140" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r10" value="&quot;elixir_overflow&quot; -&gt; NewElixirOverflow" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="registry">
+      <mxGeometry x="470" y="50" width="220" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="reg_r11" value="... (17 total effect types)" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontStyle=2;fontColor=#999999;" vertex="1" parent="registry">
+      <mxGeometry x="470" y="70" width="150" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow L3 to L4 -->
+    <mxCell id="e_l3_l4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#333333;strokeWidth=2;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="490" y="490" as="sourcePoint"/>
+        <mxPoint x="490" y="530" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- LAYER 4: Factory Resolution -->
+    <mxCell id="l4_label" value="Layer 4: Factory Resolution" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=13;fontStyle=5;fontColor=#AE4132;" vertex="1" parent="1">
+      <mxGeometry x="40" y="510" width="210" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="resolve" value="ResolveAbility(def AbilityDefinition) (Ability, error)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6D0DE;strokeColor=#AE4132;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="220" y="540" width="340" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="resolve_detail" value="1. Lookup factory in registry by effect_type&#xa;2. Call factory(trigger_type, params_json)&#xa;3. Factory parses JSON, returns concrete Ability" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#666666;" vertex="1" parent="1">
+      <mxGeometry x="580" y="535" width="260" height="50" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow L4 to L5 -->
+    <mxCell id="e_l4_l5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#333333;strokeWidth=2;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="490" y="580" as="sourcePoint"/>
+        <mxPoint x="490" y="620" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- LAYER 5: Ability Interface -->
+    <mxCell id="l5_label" value="Layer 5: Ability Interface" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=13;fontStyle=5;fontColor=#6C8EBF;" vertex="1" parent="1">
+      <mxGeometry x="40" y="600" width="190" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="iface" value="&lt;&lt;interface&gt;&gt;&#xa;Ability" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+      <mxGeometry x="310" y="630" width="260" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="iface_m1" value="TriggerType() string" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="320" y="660" width="130" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="iface_m2" value="Execute(ctx *EffectContext) []EffectEvent" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="320" y="678" width="250" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- Trigger type boxes -->
+    <mxCell id="tr_summon" value="summon" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="160" y="730" width="90" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="tr_attack" value="on_attack" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="280" y="730" width="90" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="tr_damaged" value="on_damaged" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="400" y="730" width="100" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="tr_death" value="on_death" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="530" y="730" width="90" height="30" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_iface_tr1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6C8EBF;" edge="1" parent="1" source="iface" target="tr_summon">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_iface_tr2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6C8EBF;" edge="1" parent="1" source="iface" target="tr_attack">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_iface_tr3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6C8EBF;" edge="1" parent="1" source="iface" target="tr_damaged">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_iface_tr4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6C8EBF;" edge="1" parent="1" source="iface" target="tr_death">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow L5 to L6 -->
+    <mxCell id="e_l5_l6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#333333;strokeWidth=2;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="440" y="760" as="sourcePoint"/>
+        <mxPoint x="440" y="800" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- LAYER 6: Combat Execution -->
+    <mxCell id="l6_label" value="Layer 6: Combat Execution" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=13;fontStyle=5;fontColor=#B85450;" vertex="1" parent="1">
+      <mxGeometry x="40" y="780" width="200" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="combat_flow" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;container=1;arcSize=6;" vertex="1" parent="1">
+      <mxGeometry x="100" y="810" width="740" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf1" value="Card Placed&#xa;on Board" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=10;fontStyle=1;" vertex="1" parent="combat_flow">
+      <mxGeometry x="10" y="20" width="90" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf1_tr" value="summon" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9;fontColor=#6C8EBF;fontStyle=1;" vertex="1" parent="combat_flow">
+      <mxGeometry x="35" y="5" width="50" height="18" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf2" value="Charging&#xa;40 ticks (10s)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=10;fontStyle=0;" vertex="1" parent="combat_flow">
+      <mxGeometry x="140" y="20" width="100" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf3" value="Auto-Attack&#xa;Fires" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=10;fontStyle=1;" vertex="1" parent="combat_flow">
+      <mxGeometry x="280" y="20" width="90" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf3_tr" value="on_attack" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9;fontColor=#6C8EBF;fontStyle=1;" vertex="1" parent="combat_flow">
+      <mxGeometry x="295" y="5" width="60" height="18" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf4" value="Target Takes&#xa;Damage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=10;fontStyle=1;" vertex="1" parent="combat_flow">
+      <mxGeometry x="410" y="20" width="90" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf4_tr" value="on_damaged" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9;fontColor=#6C8EBF;fontStyle=1;" vertex="1" parent="combat_flow">
+      <mxGeometry x="418" y="5" width="70" height="18" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf5" value="Card HP&#xa;&lt;= 0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=10;fontStyle=1;" vertex="1" parent="combat_flow">
+      <mxGeometry x="540" y="20" width="80" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf5_tr" value="on_death" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9;fontColor=#6C8EBF;fontStyle=1;" vertex="1" parent="combat_flow">
+      <mxGeometry x="550" y="5" width="60" height="18" as="geometry"/>
+    </mxCell>
+    <mxCell id="cf6" value="Wave-based&#xa;death resolution" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=9;fontStyle=2;" vertex="1" parent="combat_flow">
+      <mxGeometry x="645" y="20" width="85" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_cf1_2" style="strokeColor=#333333;fontSize=10;" edge="1" parent="combat_flow" source="cf1" target="cf2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_cf2_3" style="strokeColor=#333333;fontSize=10;" edge="1" parent="combat_flow" source="cf2" target="cf3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_cf3_4" style="strokeColor=#333333;fontSize=10;" edge="1" parent="combat_flow" source="cf3" target="cf4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_cf4_5" style="strokeColor=#333333;fontSize=10;" edge="1" parent="combat_flow" source="cf4" target="cf5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_cf5_6" style="strokeColor=#333333;fontSize=10;" edge="1" parent="combat_flow" source="cf5" target="cf6">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- SIDE PANEL: Effect Types -->
+    <mxCell id="effects_panel" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#82B366;dashed=1;container=1;arcSize=6;" vertex="1" parent="1">
+      <mxGeometry x="960" y="100" width="340" height="440" as="geometry"/>
+    </mxCell>
+    <mxCell id="ep_title" value="All 17 Effect Types" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=14;fontStyle=1;fontColor=#82B366;" vertex="1" parent="effects_panel">
+      <mxGeometry x="80" y="5" width="150" height="30" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="cat1" value="Stat Modifiers" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;" vertex="1" parent="effects_panel">
+      <mxGeometry x="10" y="35" width="100" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="cat1_items" value="stats_change, set_hp" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#666666;" vertex="1" parent="effects_panel">
+      <mxGeometry x="20" y="55" width="130" height="20" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="cat2" value="Damage" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;" vertex="1" parent="effects_panel">
+      <mxGeometry x="10" y="80" width="60" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="cat2_items" value="deal_damage, self_damage, damage_leader" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#666666;" vertex="1" parent="effects_panel">
+      <mxGeometry x="20" y="100" width="240" height="20" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="cat3" value="Removal / Displacement" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;" vertex="1" parent="effects_panel">
+      <mxGeometry x="10" y="125" width="160" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="cat3_items" value="destroy, destroy_random, bounce, transform" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#666666;" vertex="1" parent="effects_panel">
+      <mxGeometry x="20" y="145" width="250" height="20" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="cat4" value="Summon" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;" vertex="1" parent="effects_panel">
+      <mxGeometry x="10" y="170" width="60" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="cat4_items" value="summon_units" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#666666;" vertex="1" parent="effects_panel">
+      <mxGeometry x="20" y="190" width="80" height="20" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="cat5" value="Combat Modifiers" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;" vertex="1" parent="effects_panel">
+      <mxGeometry x="10" y="215" width="120" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="cat5_items" value="reset_attack, double_attack_speed,&#xa;random_target, skip_front_row" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#666666;" vertex="1" parent="effects_panel">
+      <mxGeometry x="20" y="235" width="210" height="40" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="cat6" value="Defensive" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;" vertex="1" parent="effects_panel">
+      <mxGeometry x="10" y="280" width="70" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="cat6_items" value="reflect, shield" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#666666;" vertex="1" parent="effects_panel">
+      <mxGeometry x="20" y="300" width="100" height="20" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="cat7" value="Resource" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;" vertex="1" parent="effects_panel">
+      <mxGeometry x="10" y="325" width="70" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="cat7_items" value="elixir_overflow" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#666666;" vertex="1" parent="effects_panel">
+      <mxGeometry x="20" y="345" width="100" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- Divider -->
+    <mxCell id="ep_div" value="" style="line;strokeWidth=1;strokeColor=#CCCCCC;" vertex="1" parent="effects_panel">
+      <mxGeometry x="10" y="370" width="320" height="10" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="cat8" value="Design Patterns" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;fontColor=#AE4132;" vertex="1" parent="effects_panel">
+      <mxGeometry x="10" y="380" width="110" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="cat8_items" value="Strategy + Abstract Factory&#xa;Open/Closed Principle" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#666666;" vertex="1" parent="effects_panel">
+      <mxGeometry x="20" y="400" width="160" height="35" as="geometry"/>
+    </mxCell>
+
+    <!-- SIDE PANEL: Target Types -->
+    <mxCell id="targets_panel" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#D6B656;dashed=1;container=1;arcSize=6;" vertex="1" parent="1">
+      <mxGeometry x="960" y="570" width="340" height="320" as="geometry"/>
+    </mxCell>
+    <mxCell id="tp_title" value="10 Target Types (params JSON)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=14;fontStyle=1;fontColor=#D6B656;" vertex="1" parent="targets_panel">
+      <mxGeometry x="40" y="5" width="240" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg1" value="self - the card itself" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="40" width="130" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg2" value="adjacent - cards left and right" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="65" width="180" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg3" value="vertical - same column above/below" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="90" width="210" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg4" value="all_allies - all friendly units" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="115" width="170" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg5" value="all_enemies - all enemy units" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="140" width="180" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg6" value="opponent_column - enemies same column" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="165" width="240" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg7" value="opponent_back_row - back row enemies" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="190" width="240" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg8" value="enemy_in_front - directly in front" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="215" width="210" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg9" value="random_enemy - one random enemy" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="240" width="210" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="tg10" value="same_colour - units matching affiliation" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="targets_panel">
+      <mxGeometry x="15" y="265" width="240" height="20" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>

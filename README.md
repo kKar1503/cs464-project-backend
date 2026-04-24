@@ -1,223 +1,183 @@
-# CS464 Game Backend - Monorepo
+# CS464 Card Game Backend
 
-A microservices-based game backend built with Go, featuring matchmaking, gameplay, friend management, and replay systems.
+A multiplayer online card battle game backend built with Go. Players collect cards through packs, build decks, queue for matchmaking, and battle in real-time over WebSocket.
+
+## Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| **Auth** | 8000 | Registration, login, session management, bans |
+| **Matchmaking** | 8001 | MMR-based queue and match pairing |
+| **Gameplay** | 8002 | Real-time game engine over WebSocket (4 ticks/sec) |
+| **Deck** | 8005 | Cards, decks, packs, leveling, crystals |
+| **Friendlist** | 8003 | Friend management |
+| **Replay** | 8004 | Game replay storage |
+| **Cursor UDP** | 9001/UDP | Real-time cursor broadcast (Rust) |
+| **MySQL** | 3306 | Persistent storage |
+| **Redis** | 6379 | Session cache, queue state, match notifications |
 
 ## Project Structure
 
 ```
 backend/
 ├── services/
-│   ├── matchmaking/    # Matchmaking service (MMR-based matching)
-│   ├── gameplay/       # Game state and validation service
-│   ├── friendlist/     # Friend management service
-│   ├── replay/         # Game replay service
-│   └── cursor-udp/     # Rust-based UDP cursor broadcast service (TBD)
-├── shared/             # Shared Go code and types
-├── bin/                # Compiled binaries (gitignored)
-├── go.work             # Go workspace configuration
-├── docker-compose.yml  # Docker orchestration
-├── Makefile           # Build automation
-└── README.md
+│   ├── auth/           # Auth service
+│   ├── matchmaking/    # Matchmaking service
+│   ├── gameplay/       # Gameplay service (WebSocket)
+│   ├── deck/           # Deck service
+│   ├── friendlist/     # Friendlist service
+│   ├── replay/         # Replay service
+│   └── cursor-udp/     # Cursor UDP service (Rust)
+├── db/
+│   ├── migrations/     # SQL migration files (up/down)
+│   ├── queries/        # sqlc query definitions
+│   └── sqlc/           # Generated Go database bindings
+├── shared/             # Shared Go types across services
+├── docs/diagrams/      # Architecture diagrams (.drawio)
+├── docker-compose.yml
+├── Makefile
+└── go.work             # Go workspace
 ```
-
-## Services Overview
-
-### Matchmaking Service (Port 8001)
-Responsible for matching players based on their MMR (Matchmaking Rating). When two players are matched, it creates a game session and hands it off to the gameplay service.
-
-### Gameplay Service (Port 8002)
-Handles game state management, validates player actions, and orchestrates the gameplay flow between matched players.
-
-### Friendlist Service (Port 8003)
-Manages player friend relationships, friend requests, and social features.
-
-### Replay Service (Port 8004)
-Stores and serves game replay data for post-game analysis.
-
-### Cursor UDP Service (Port 9001/UDP)
-Written in Rust, broadcasts real-time cursor movements using UDP for low-latency updates.
-
-### MySQL Database (Port 3306)
-Persistent storage for users, game sessions, friendships, and replays. See [DATABASE.md](DATABASE.md) for schema details.
-
-### Redis Cache (Port 6379)
-In-memory cache for sessions, matchmaking queues, and real-time game state.
 
 ## Prerequisites
 
-- Go 1.23 or later
-- Docker and Docker Compose (for containerized deployment)
-- Make (for build automation)
-- Rust (for cursor-udp service, when implemented)
+- [Go](https://go.dev/dl/) 1.25+
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- [Make](https://www.gnu.org/software/make/)
+- [golang-migrate](https://github.com/golang-migrate/migrate) (`brew install golang-migrate`)
+- [sqlc](https://sqlc.dev/) (`brew install sqlc`)
 
 ## Getting Started
 
-### Local Development
+### 1. Set up environment variables
 
-1. Clone the repository:
 ```bash
-cd backend
+cp .env.example .env
 ```
 
-2. Build all services:
+Edit `.env` and set secure passwords for `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, and `REDIS_PASSWORD`.
+
+### 2. Start MySQL and Redis
+
 ```bash
-make build
+docker-compose up -d mysql redis
 ```
 
-3. Run individual services:
+Wait for the health checks to pass (about 10-15 seconds).
+
+### 3. Run database migrations
+
 ```bash
+make migrate-up
+```
+
+### 4. Start the services
+
+**With Docker (recommended):**
+
+```bash
+docker-compose up -d
+```
+
+**Locally (for development):**
+
+```bash
+# Run individual services
+make run-auth
 make run-matchmaking
 make run-gameplay
-make run-friendlist
-make run-replay
-```
+make run-deck
 
-4. Run all services:
-```bash
+# Or all at once
 make run-all
 ```
 
-### Using Docker Compose
+### 5. Verify
 
-1. Build Docker images:
+Each service exposes a health check endpoint:
+
 ```bash
-make docker-build
+curl http://localhost:8000/health   # Auth
+curl http://localhost:8001/health   # Matchmaking
+curl http://localhost:8002/health   # Gameplay
+curl http://localhost:8005/health   # Deck
 ```
 
-2. Start all services:
+## Development
+
+### Running locally
+
+Services need MySQL and Redis running. Start them with Docker, then run Go services directly for faster iteration:
+
 ```bash
-make docker-up
+# Start infra only
+docker-compose up -d mysql redis
+
+# Run the service you're working on
+cd services/gameplay
+go run .
 ```
 
-3. Stop all services:
-```bash
-make docker-down
-```
+### Database changes
 
-Or use docker-compose directly:
-```bash
-docker-compose up -d     # Start in detached mode
-docker-compose logs -f   # View logs
-docker-compose down      # Stop all services
-```
+1. Create a new migration:
+   ```bash
+   make migrate-create NAME=add_some_table
+   ```
+2. Write your SQL in the generated `db/migrations/XXXXXX_add_some_table.up.sql` and `.down.sql` files.
+3. Run the migration:
+   ```bash
+   make migrate-up
+   ```
+4. If you changed queries, regenerate the Go bindings:
+   ```bash
+   make sqlc-generate
+   ```
 
-## Makefile Commands
+### Useful Make commands
 
 | Command | Description |
 |---------|-------------|
-| `make help` | Show all available commands |
-| `make build` | Build all Go services |
-| `make build-<service>` | Build a specific service |
-| `make run-<service>` | Run a specific service |
-| `make run-all` | Run all services |
+| `make build` | Build all services |
 | `make test` | Run all tests |
-| `make clean` | Clean build artifacts |
-| `make docker-build` | Build Docker images |
-| `make docker-up` | Start services with docker-compose |
-| `make docker-down` | Stop services with docker-compose |
+| `make fmt` | Format code (gofumpt) |
+| `make lint` | Lint code (golangci-lint) |
 | `make tidy` | Tidy Go module dependencies |
-| `make fmt` | Format Go code |
-| `make lint` | Run linter (requires golangci-lint) |
+| `make docker-up` | Start all containers |
+| `make docker-down` | Stop all containers |
+| `make migrate-up` | Run pending migrations |
+| `make migrate-down` | Rollback last migration |
+| `make migrate-reset` | Drop everything and re-run all migrations |
+| `make sqlc-generate` | Regenerate Go code from SQL queries |
 
-## Security
+### Adding a new service
 
-### Generate Strong Passwords
+1. Create the directory: `mkdir -p services/my-service`
+2. Init the module: `cd services/my-service && go mod init github.com/kKar1503/cs464-backend/services/my-service`
+3. Add to `go.work`
+4. Create a `Dockerfile` and add the service to `docker-compose.yml`
+5. Add build/run targets to the `Makefile`
 
-Use the provided scripts to generate secure random passwords:
+## Service Status
 
-```bash
-# Generate new passwords (display only)
-./scripts/generate-passwords.sh
+### Done
 
-# Generate and update .env automatically
-./scripts/update-env-passwords.sh
+- [x] **Auth Service** - Registration, login/logout, bearer token sessions, Redis-cached validation, user bans
+- [x] **Matchmaking Service** - MMR-based queue, expanding-range matching algorithm, match accept/reject, background matchmaker loop
+- [x] **Gameplay Service** - WebSocket game engine, server-authoritative tick-based game loop, card placement, elixir system, auto-attack combat, card abilities/effects engine
+- [x] **Deck Service** - Card collection, deck CRUD, deck validation, pack opening with crystal rewards, card leveling, disenchanting, starter content
+- [x] **Database** - MySQL schema with 20+ migrations, sqlc-generated type-safe queries
+- [x] **Infrastructure** - Docker Compose orchestration, Redis caching, health checks on all services
 
-# Manual generation
-openssl rand -base64 32
-```
+### Not Done
 
-See [scripts/README.md](scripts/README.md) for more details.
+- [ ] **Friendlist Service** - Stub only (health check endpoint)
+- [ ] **Replay Service** - Stub only (health check endpoint)
+- [ ] **Cursor UDP Service** - Not implemented
+- [ ] **Rate limiting** - No rate limiting on API endpoints
+- [ ] **HTTPS** - Not enforced (would be handled by a reverse proxy in production)
+- [ ] **API Gateway** - Services are accessed directly, no unified gateway
 
-## Service Ports
+## Diagrams
 
-- Matchmaking: `8001`
-- Gameplay: `8002`
-- Friendlist: `8003`
-- Replay: `8004`
-- Cursor UDP: `9001/udp` (TBD)
-
-## Development Workflow
-
-### Adding a New Service
-
-1. Create service directory:
-```bash
-mkdir -p services/new-service
-```
-
-2. Initialize Go module:
-```bash
-cd services/new-service
-go mod init github.com/kKar1503/cs464-backend/services/new-service
-```
-
-3. Add to `go.work`:
-```
-use (
-    ...
-    ./services/new-service
-)
-```
-
-4. Create Dockerfile and add to docker-compose.yml
-
-5. Update Makefile with build/run targets
-
-### Working with Shared Code
-
-The `shared/` directory contains common types and utilities used across services. To use shared code in a service:
-
-```go
-import "github.com/kKar1503/cs464-backend/shared"
-```
-
-### Testing
-
-Run tests for all services:
-```bash
-make test
-```
-
-Or test individual modules:
-```bash
-cd services/matchmaking
-go test ./...
-```
-
-## Architecture
-
-This monorepo uses Go workspaces to manage multiple services while sharing common code. Each service is independently deployable and can be scaled separately using Docker.
-
-Services communicate via HTTP/REST APIs (and UDP for cursor movements). The architecture supports:
-
-- Independent service deployment
-- Shared code reuse via the `shared/` module
-- Container orchestration via Docker Compose
-- Simple build automation via Makefile
-
-## Next Steps
-
-- [ ] Implement matchmaking algorithm
-- [ ] Add game state management in gameplay service
-- [ ] Implement friend system
-- [ ] Add replay recording and playback
-- [ ] Create Rust-based cursor UDP service
-- [ ] Add database integration (PostgreSQL/Redis)
-- [ ] Implement authentication and authorization
-- [ ] Add API gateway
-- [ ] Set up monitoring and logging
-- [ ] Write comprehensive tests
-
-## License
-
-[Add your license here]
+Architecture diagrams are in [`docs/diagrams/`](docs/diagrams/). Open `.drawio` files with [draw.io](https://app.diagrams.net/) or the VS Code draw.io extension. See the [diagrams README](docs/diagrams/README.md) for descriptions.
