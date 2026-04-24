@@ -143,19 +143,32 @@ class GamePlayer:
                 msg = json.loads(raw)
                 if verbose:
                     print(f"    {CYAN}[{self.name} recv]{NC} {json.dumps(msg)}")
+
                 sv = msg.get("state_view")
-                if isinstance(sv, dict):
-                    tn = sv.get("tick_number", 0)
-                    with lock:
+                params = msg.get("params")
+
+                with lock:
+                    # Update tick number from state_view
+                    if isinstance(sv, dict):
+                        tn = sv.get("tick_number", 0)
                         if tn > self.latest_tick:
                             self.latest_tick = tn
-                params = msg.get("params")
-                if isinstance(params, dict) and params.get("phase"):
-                    with lock:
-                        self.latest_phase = params["phase"]
+
+                    # Update phase from state_view (server puts phase here, not in params)
+                    if isinstance(sv, dict) and sv.get("phase"):
+                        phase = sv["phase"]
+                        if self.latest_phase != phase:
+                            self.latest_phase = phase
+                            if not self.phase_history or self.phase_history[-1] != phase:
+                                self.phase_history.append(phase)
+
+                    # Update params from tick updates (draw_pile, hand, board, hp, etc.)
+                    if isinstance(params, dict) and ("draw_pile" in params or "hand" in params):
+                        # Merge phase from state_view into params for backward compat
+                        if isinstance(sv, dict) and sv.get("phase"):
+                            params["phase"] = sv["phase"]
                         self.latest_params = params
-                        if not self.phase_history or self.phase_history[-1] != params["phase"]:
-                            self.phase_history.append(params["phase"])
+
             except websocket.WebSocketTimeoutException:
                 continue
             except Exception:
